@@ -1,8 +1,7 @@
-// frontend/app/hooks/useGroups.ts
-'use client';
 
+// frontend/app/hooks/useGroups.ts
 import { useEffect, useState } from 'react';
-import { api, Group } from '@/app/services/api';
+import { getGroups, Group } from '@/app/services/api';
 
 export function useGroups() {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -10,20 +9,21 @@ export function useGroups() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchGroups = async () => {
+    async function loadGroups() {
       try {
         setLoading(true);
-        const data = await api.getGroups();
+        const data = await getGroups();
         setGroups(data);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro ao carregar grupos');
+        setError('Erro ao carregar grupos');
+        console.error(err);
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    fetchGroups();
+    loadGroups();
   }, []);
 
   return { groups, loading, error };

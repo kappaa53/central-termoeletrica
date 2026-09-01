@@ -1,17 +1,42 @@
-"use client";
+// frontend/app/groups/[code]/page.tsx
+'use client';
 
-import { useParams } from "next/navigation";
-import { useGroup } from "@/app/hooks/useGroup";
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { getGroupByCode, Group } from '@/app/services/api';
 
 export default function GroupDetailPage() {
   const params = useParams();
   const code = params.code as string;
+  
+  const [group, setGroup] = useState<Group | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const { group, latestReading, readings, loading, error } = useGroup(code);
+  useEffect(() => {
+    async function loadGroup() {
+      try {
+        setLoading(true);
+        const data = await getGroupByCode(code);
+        setGroup(data);
+        setError(null);
+      } catch (err) {
+        setError('Erro ao carregar dados do grupo');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (code) {
+      loadGroup();
+    }
+  }, [code]);
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="flex items-center justify-center h-64">
         <div className="text-gray-500">Carregando dados do {code}...</div>
       </div>
     );
@@ -19,134 +44,138 @@ export default function GroupDetailPage() {
 
   if (error || !group) {
     return (
-      <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-        {error || "Grupo não encontrado"}
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-500">{error || 'Grupo não encontrado'}</div>
       </div>
     );
   }
 
   return (
     <div className="p-6">
+      {/* Header do Grupo */}
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">
-          {group.code} — {group.manufacturer}
-        </h2>
-
-        <p className="text-gray-600">
-          {group.nominal_power_mw} MW • {group.cylinders} cilindros •{" "}
-          {group.cylinder_configuration}
-        </p>
-      </div>
-
-      <div className="mb-6 rounded-lg bg-white p-6 shadow">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-sm text-gray-600">Status atual</span>
-            <div className="mt-1 text-xl font-semibold">{group.status}</div>
+            <h1 className="text-2xl font-bold text-gray-900">{group.code}</h1>
+            <p className="text-gray-600">
+              {group.manufacturer} - {group.engine_model || 'Modelo não informado'}
+            </p>
           </div>
-
-          {latestReading && (
-            <div className="text-right">
-              <span className="text-sm text-gray-600">Última leitura</span>
-              <div className="mt-1 text-sm">
-                {new Date(latestReading.timestamp).toLocaleString("pt-PT")}
-              </div>
-            </div>
-          )}
+          <div className="flex items-center space-x-2">
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+              group.status === 'Operando' ? 'bg-green-100 text-green-800' :
+              group.status === 'Parado' ? 'bg-red-100 text-red-800' :
+              'bg-yellow-100 text-yellow-800'
+            }`}>
+              {group.status}
+            </span>
+          </div>
         </div>
       </div>
 
-      {latestReading && (
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-lg bg-white p-4 shadow">
-            <span className="text-sm text-gray-600">Potência</span>
-            <div className="mt-1 text-xl font-bold">
-              {latestReading.power !== null
-                ? `${latestReading.power} kW`
-                : "---"}
-            </div>
-          </div>
+      {/* Cards de Informações */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-sm text-gray-500">Potência Nominal</div>
+          <div className="text-xl font-semibold">{group.nominal_power_mw} MW</div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-sm text-gray-500">Cilindros</div>
+          <div className="text-xl font-semibold">{group.cylinders}</div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-sm text-gray-500">Configuração</div>
+          <div className="text-xl font-semibold">{group.cylinder_configuration}</div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-sm text-gray-500">Nº Série</div>
+          <div className="text-xl font-semibold">{group.serial_number || 'N/A'}</div>
+        </div>
+      </div>
 
-          <div className="rounded-lg bg-white p-4 shadow">
-            <span className="text-sm text-gray-600">Horas de operação</span>
-            <div className="mt-1 text-xl font-bold">
-              {latestReading.operating_hours !== null
-                ? `${latestReading.operating_hours} h`
-                : "---"}
-            </div>
-          </div>
+      {/* Tabs Navigation */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex space-x-8">
+          <Link
+            href={`/groups/${code}`}
+            className="py-2 px-1 border-b-2 border-blue-500 text-blue-600 font-medium"
+          >
+            Visão Geral
+          </Link>
+          <Link
+            href={`/groups/${code}/readings`}
+            className="py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          >
+            Leituras
+          </Link>
+          <Link
+            href={`/groups/${code}/alerts`}
+            className="py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          >
+            Alertas
+          </Link>
+          <Link
+            href={`/groups/${code}/maintenance`}
+            className="py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          >
+            Manutenção
+          </Link>
+        </nav>
+      </div>
 
-          <div className="rounded-lg bg-white p-4 shadow">
-            <span className="text-sm text-gray-600">Temperatura do óleo</span>
-            <div className="mt-1 text-xl font-bold">
-              {latestReading.oil_temperature !== null
-                ? `${latestReading.oil_temperature} °C`
-                : "---"}
+      {/* Conteúdo da Visão Geral */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Dados Operacionais - Mock por enquanto */}
+        <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold mb-4">Dados Operacionais</h2>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-gray-50 rounded">
+                <div className="text-sm text-gray-500">Temperatura do Motor</div>
+                <div className="text-2xl font-bold">-- °C</div>
+              </div>
+              <div className="p-4 bg-gray-50 rounded">
+                <div className="text-sm text-gray-500">Pressão do Óleo</div>
+                <div className="text-2xl font-bold">-- bar</div>
+              </div>
+              <div className="p-4 bg-gray-50 rounded">
+                <div className="text-sm text-gray-500">Carga Atual</div>
+                <div className="text-2xl font-bold">-- MW</div>
+              </div>
+              <div className="p-4 bg-gray-50 rounded">
+                <div className="text-sm text-gray-500">RPM</div>
+                <div className="text-2xl font-bold">--</div>
+              </div>
             </div>
-          </div>
-
-          <div className="rounded-lg bg-white p-4 shadow">
-            <span className="text-sm text-gray-600">Temperatura da água</span>
-            <div className="mt-1 text-xl font-bold">
-              {latestReading.water_temperature !== null
-                ? `${latestReading.water_temperature} °C`
-                : "---"}
+            <div className="text-center text-gray-400 text-sm py-4">
+              Dados em tempo real em desenvolvimento
             </div>
           </div>
         </div>
-      )}
 
-      <div className="rounded-lg bg-white p-6 shadow">
-        <h2 className="mb-4 text-lg font-semibold">Últimas leituras</h2>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">
-                  Data/hora
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">
-                  Potência (kW)
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">
-                  Frequência (Hz)
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">
-                  Temp. do óleo (°C)
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">
-                  Temp. da água (°C)
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {readings.slice(0, 10).map((reading) => (
-                <tr key={reading.id}>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {new Date(reading.timestamp).toLocaleString("pt-PT")}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {reading.power !== null ? reading.power : "---"}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {reading.frequency !== null ? reading.frequency : "---"}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {reading.oil_temperature !== null
-                      ? reading.oil_temperature
-                      : "---"}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {reading.water_temperature !== null
-                      ? reading.water_temperature
-                      : "---"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* Resumo Rápido */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold mb-4">Resumo</h2>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center pb-2 border-b">
+              <span className="text-gray-600">Status</span>
+              <span className={`font-medium ${
+                group.status === 'Operando' ? 'text-green-600' :
+                group.status === 'Parado' ? 'text-red-600' :
+                'text-yellow-600'
+              }`}>
+                {group.status}
+              </span>
+            </div>
+            <div className="flex justify-between items-center pb-2 border-b">
+              <span className="text-gray-600">Fabricante</span>
+              <span className="font-medium">{group.manufacturer}</span>
+            </div>
+            <div className="flex justify-between items-center pb-2 border-b">
+              <span className="text-gray-600">Última Leitura</span>
+              <span className="font-medium">--</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
