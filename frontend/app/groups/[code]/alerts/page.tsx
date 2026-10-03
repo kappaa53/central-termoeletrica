@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Alert, getAlerts } from '@/app/services/api';
+import { Alert } from '@/app/services/api';
 import Link from 'next/link';
 
 const MOCK_ALERTS_BY_GROUP: Record<string, Alert[]> = {

@@ -3,6 +3,8 @@
 
 import Link from 'next/link';
 import { useGroups } from '@/app/hooks/useGroups';
+import Badge from '@/app/components/ui/Badge';
+import { toGroupStatus } from '@/app/lib/constants/statuses';
 
 export default function GroupsPage() {
   const { groups, loading, error } = useGroups();
@@ -41,13 +43,7 @@ export default function GroupsPage() {
                 <p className="text-xs text-gray-500">{group.engine_model || 'Modelo não informado'}</p>
               </div>
               <div className="flex flex-col items-end">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  group.status === 'Operando' ? 'bg-green-100 text-green-800' :
-                  group.status === 'Parado' ? 'bg-red-100 text-red-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {group.status}
-                </span>
+                <Badge status={toGroupStatus(group.status)} />
                 <span className="text-xs text-gray-500 mt-1">{group.nominal_power_mw} MW</span>
               </div>
             </div>

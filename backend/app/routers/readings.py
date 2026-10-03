@@ -5,20 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal
+from app.core.database import get_db
 from app.models.operational_reading import OperationalReading as ReadingModel
 from app.schemas.reading import OperationalReadingResponse
 
 
 router = APIRouter(prefix="/readings", tags=["readings"])
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.get("/", response_model=List[OperationalReadingResponse])
@@ -30,7 +22,7 @@ def get_readings(
     """Lista leituras operacionais com filtros"""
     query = db.query(ReadingModel)
     
-    if group_id:
+    if group_id is not None:
         query = query.filter(ReadingModel.group_id == group_id)
     
     readings = query.order_by(desc(ReadingModel.timestamp)).limit(limit).all()

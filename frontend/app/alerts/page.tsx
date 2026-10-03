@@ -3,15 +3,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, getAlerts, acknowledgeAlert, resolveAlert } from '@/app/services/api';
-import { 
-  ExclamationTriangleIcon, 
-  CheckCircleIcon, 
-  XCircleIcon,
-  XMarkIcon,
-  CheckIcon
-} from '@heroicons/react/24/outline';
-import Link from 'next/link';
+import { Alert } from '@/app/services/api';
+import { CheckCircleIcon } from '@heroicons/react/24/outline';
 
 // Dados MOCK
 const MOCK_ALERTS: Alert[] = [

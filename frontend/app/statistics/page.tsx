@@ -16,13 +16,10 @@ import {
 } from '@/app/services/api';
 
 import { 
-  ChartBarIcon,
   ArrowTrendingUpIcon,
   ExclamationTriangleIcon,
   WrenchScrewdriverIcon,
   PowerIcon,
-  ClockIcon,
-  CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
 
 export default function StatisticsPage() {

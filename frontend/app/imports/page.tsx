@@ -47,7 +47,7 @@ const getStatusText = (status: ImportBatch['status']) => {
   }
 };
 
-const getFileTypeIcon = (type: ImportBatch['file_type']) => {
+const getFileTypeIcon = () => {
   return <DocumentIcon className="h-5 w-5 text-gray-400" />;
 };
 
@@ -61,13 +61,8 @@ export default function ImportsPage() {
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    loadBatches();
-  }, []);
-
   const loadBatches = async () => {
     try {
-      setLoading(true);
       const data = await getImportBatches();
       setBatches(data);
     } catch (err) {
@@ -76,6 +71,13 @@ export default function ImportsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    getImportBatches()
+      .then(setBatches)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleFileUpload = async (file: File) => {
     try {
@@ -228,7 +230,7 @@ export default function ImportsPage() {
                   <tr key={batch.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center space-x-2">
-                        {getFileTypeIcon(batch.file_type)}
+                        {getFileTypeIcon()}
                         <span className="text-sm font-medium text-gray-900">
                           {batch.filename}
                         </span>

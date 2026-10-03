@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getGroupByCode, Group } from '@/app/services/api';
+import Badge from '@/app/components/ui/Badge';
+import { toGroupStatus } from '@/app/lib/constants/statuses';
 
 export default function GroupDetailPage() {
   const params = useParams();
@@ -62,13 +64,7 @@ export default function GroupDetailPage() {
             </p>
           </div>
           <div className="flex items-center space-x-2">
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              group.status === 'Operando' ? 'bg-green-100 text-green-800' :
-              group.status === 'Parado' ? 'bg-red-100 text-red-800' :
-              'bg-yellow-100 text-yellow-800'
-            }`}>
-              {group.status}
-            </span>
+            <Badge status={toGroupStatus(group.status)} />
           </div>
         </div>
       </div>
@@ -103,22 +99,10 @@ export default function GroupDetailPage() {
             Visão Geral
           </Link>
           <Link
-            href={`/groups/${code}/readings`}
-            className="py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-          >
-            Leituras
-          </Link>
-          <Link
             href={`/groups/${code}/alerts`}
             className="py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
           >
             Alertas
-          </Link>
-          <Link
-            href={`/groups/${code}/maintenance`}
-            className="py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-          >
-            Manutenção
           </Link>
         </nav>
       </div>
@@ -159,13 +143,7 @@ export default function GroupDetailPage() {
           <div className="space-y-3">
             <div className="flex justify-between items-center pb-2 border-b">
               <span className="text-gray-600">Status</span>
-              <span className={`font-medium ${
-                group.status === 'Operando' ? 'text-green-600' :
-                group.status === 'Parado' ? 'text-red-600' :
-                'text-yellow-600'
-              }`}>
-                {group.status}
-              </span>
+              <Badge status={toGroupStatus(group.status)} />
             </div>
             <div className="flex justify-between items-center pb-2 border-b">
               <span className="text-gray-600">Fabricante</span>

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const groups = [
   {
     id: "GG1",
@@ -104,12 +106,12 @@ export default function Home() {
             </p>
           </div>
 
-          <a
+          <Link
             href="/groups"
             className="hidden rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:block"
           >
             Ver todos
-          </a>
+          </Link>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

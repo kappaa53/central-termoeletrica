@@ -117,10 +117,10 @@ def generate_reading(
     power_factor = random.uniform(0.91, 0.98)
 
     # Estimativa simplificada de corrente trifásica.
-    # P(kW) = sqrt(3) * V * I * FP / 1000
+    # P(W) = sqrt(3) * V * I * FP  (power está em MW)
     current = (
         power
-        * 1000
+        * 1_000_000
         / (3**0.5 * voltage * power_factor)
     )
 
@@ -150,7 +150,7 @@ def generate_reading(
         timestamp=timestamp,
         operator="Operador",
         status="Em operação",
-        operating_hours=operating_hours + 3.0,
+        operating_hours=round(operating_hours + 3.0, 1),
         power=round(power, 3),
         frequency=round(frequency, 3),
         voltage=round(voltage, 2),
@@ -211,7 +211,8 @@ def seed_readings():
             print("Leituras existentes removidas.")
             print()
 
-        today = datetime.now().replace(
+        now = datetime.now()
+        today = now.replace(
             minute=0,
             second=0,
             microsecond=0,
@@ -225,8 +226,8 @@ def seed_readings():
                 f"({group.manufacturer})..."
             )
 
-            operating_hours = random.uniform(1000.0, 5000.0)
-            energy_produced = random.uniform(10000.0, 50000.0)
+            operating_hours = round(random.uniform(1000.0, 5000.0), 1)
+            energy_produced = round(random.uniform(10000.0, 50000.0), 3)
 
             group_readings = []
 
@@ -240,6 +241,10 @@ def seed_readings():
                         second=0,
                         microsecond=0,
                     )
+
+                    # Não gerar leituras no futuro
+                    if timestamp > now:
+                        continue
 
                     reading = generate_reading(
                         group=group,

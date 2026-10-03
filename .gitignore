@@ -9,7 +9,7 @@ out/
 !.env.example
 
 # Python
-_pycache_/
+__pycache__/
 *.py[cod]
 .venv/
 venv/

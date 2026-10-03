@@ -4,20 +4,12 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal
+from app.core.database import get_db
 from app.models.group import Group as GroupModel
 from app.schemas.group import GroupResponse
 
 
 router = APIRouter(prefix="/groups", tags=["groups"])
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.get("/", response_model=List[GroupResponse])

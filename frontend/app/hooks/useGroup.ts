@@ -2,7 +2,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api, Group, OperationalReading } from '@/app/services/api';
+import {
+  getGroupByCode,
+  getLatestReading,
+  getReadings,
+  Group,
+  OperationalReading,
+} from '@/app/services/api';
 
 export function useGroup(code: string) {
   const [group, setGroup] = useState<Group | null>(null);
@@ -15,17 +21,17 @@ export function useGroup(code: string) {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const groupData = await api.getGroupByCode(code);
+        const groupData = await getGroupByCode(code);
         setGroup(groupData);
-        
-        // Buscar última leitura
-        const latest = await api.getLatestReading(groupData.id);
+
+        // Última leitura e histórico das últimas 24 leituras
+        const [latest, history] = await Promise.all([
+          getLatestReading(groupData.id),
+          getReadings({ groupId: groupData.id, limit: 24 }),
+        ]);
         setLatestReading(latest);
-        
-        // Buscar últimas 24 leituras
-        const history = await api.getReadings(groupData.id, 24);
         setReadings(history);
-        
+
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erro ao carregar dados do grupo');

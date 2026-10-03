@@ -1,5 +1,4 @@
-
-const API_BASE = 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 // ============ TIPOS ============
 export interface Group {
@@ -15,21 +14,29 @@ export interface Group {
   status: string;
 }
 
+// Espelha backend/app/schemas/reading.py (OperationalReadingResponse)
 export interface OperationalReading {
   id: number;
   group_id: number;
   timestamp: string;
-  active_power_mw: number;
-  reactive_power_mvar: number;
-  voltage_v: number;
-  current_a: number;
-  frequency_hz: number;
-  oil_pressure_bar: number;
-  oil_temperature_c: number;
-  coolant_temperature_c: number;
-  exhaust_temperature_c: number;
-  rpm: number;
-  running_hours: number;
+  operator: string;
+  status: string;
+  operating_hours: number | null;
+  power: number | null; // MW
+  frequency: number | null; // Hz
+  voltage: number | null; // V
+  current_r: number | null; // A
+  current_s: number | null; // A
+  current_t: number | null; // A
+  power_factor: number | null;
+  reactive_power: number | null; // MVAr
+  energy_produced: number | null; // MWh (acumulado)
+  exhaust_temp_right: number | null; // °C
+  exhaust_temp_left: number | null; // °C
+  oil_temperature: number | null; // °C
+  oil_pressure: number | null; // bar
+  water_temperature: number | null; // °C
+  intake_temperature: number | null; // °C
 }
 
 export interface Alert {
@@ -49,7 +56,7 @@ export interface Alert {
 
 // ============ GRUPOS ============
 export async function getGroups(): Promise<Group[]> {
-  const response = await fetch(`${API_BASE}/groups`);
+  const response = await fetch(`${API_BASE}/groups/`);
   if (!response.ok) throw new Error('Failed to fetch groups');
   return response.json();
 }
@@ -61,23 +68,24 @@ export async function getGroupByCode(code: string): Promise<Group> {
 }
 
 // ============ LEITURAS ============
-export async function getGroupReadings(
-  groupCode: string,
-  limit: number = 20
+export async function getReadings(
+  { groupId, limit = 100 }: { groupId?: number; limit?: number } = {}
 ): Promise<OperationalReading[]> {
-  const response = await fetch(`${API_BASE}/groups/${groupCode}/readings?limit=${limit}`);
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (groupId !== undefined) params.set('group_id', String(groupId));
+  const response = await fetch(`${API_BASE}/readings/?${params}`);
   if (!response.ok) throw new Error('Failed to fetch readings');
   return response.json();
 }
 
-export async function getLatestReading(groupCode: string): Promise<OperationalReading | null> {
-  const response = await fetch(`${API_BASE}/groups/${groupCode}/readings/latest`);
-  if (response.status === 404) return null;
+export async function getLatestReading(groupId: number): Promise<OperationalReading | null> {
+  const response = await fetch(`${API_BASE}/readings/latest?group_id=${groupId}`);
   if (!response.ok) throw new Error('Failed to fetch latest reading');
   return response.json();
 }
 
 // ============ ALERTAS ============
+// TODO (Fase 3): endpoints /alerts ainda não existem no backend.
 export async function getAlerts(groupCode?: string): Promise<Alert[]> {
   const url = groupCode 
     ? `${API_BASE}/alerts?group_code=${groupCode}`
@@ -125,7 +133,9 @@ export async function getIncidents(groupCode?: string): Promise<Incident[]> {
   await new Promise(resolve => setTimeout(resolve, 300));
   
   // Retornar dados MOCK
-  return MOCK_INCIDENTS;
+  return groupCode
+    ? MOCK_INCIDENTS.filter(inc => inc.group_code === groupCode)
+    : MOCK_INCIDENTS;
 }
 
 export async function getIncidentById(id: number): Promise<Incident | null> {
@@ -259,7 +269,6 @@ const MOCK_INCIDENTS: Incident[] = [
   },
 ];
 
-// frontend/app/services/api.ts 
 
 // ============ MANUTENÇÃO ============
 export interface Maintenance {
@@ -544,7 +553,7 @@ export interface ImportError {
 
 export interface ImportPreview {
   headers: string[];
-  rows: any[][];
+  rows: unknown[][];
   total_rows: number;
   has_errors: boolean;
 }
