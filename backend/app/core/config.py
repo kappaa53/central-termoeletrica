@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
     JWT_SECRET: str = "alterar-este-segredo"
+    # Duração da sessão (um turno de 8 horas)
+    ACCESS_TOKEN_MINUTES: int = 480
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",

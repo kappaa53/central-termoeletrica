@@ -49,6 +49,11 @@ class User(Base):
         nullable=False,
     )
 
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
     role = relationship(
         "Role",
         back_populates="users",

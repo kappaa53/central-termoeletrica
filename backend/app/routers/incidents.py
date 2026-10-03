@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, desc, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.alert import Alert
 from app.models.group import Group
+from app.models.user import User
 from app.models.incident import (
     INCIDENT_OPEN_STATUSES,
     INCIDENT_STATUSES,
@@ -146,7 +148,11 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=IncidentDetail, status_code=201)
-def create_incident(body: IncidentCreate, db: Session = Depends(get_db)):
+def create_incident(
+    body: IncidentCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Abre uma ocorrência (opcionalmente a partir de um alerta)"""
     group = get_group_by_code(body.group_code, db)
 
@@ -164,13 +170,13 @@ def create_incident(body: IncidentCreate, db: Session = Depends(get_db)):
         severity=body.severity,
         status="ABERTA",
         description=body.description,
-        operator=body.operator,
+        operator=user.name,
         opened_at=t,
         created_at=t,
         updated_at=t,
     )
     incident.updates.append(
-        IncidentUpdate(created_at=t, author=body.operator, to_status="ABERTA", note="Ocorrência aberta")
+        IncidentUpdate(created_at=t, author=user.name, to_status="ABERTA", note="Ocorrência aberta")
     )
     db.add(incident)
     db.commit()
@@ -192,7 +198,12 @@ def edit_incident(incident_id: int, body: IncidentEdit, db: Session = Depends(ge
 
 
 @router.post("/{incident_id}/status", response_model=IncidentDetail)
-def change_status(incident_id: int, body: IncidentStatusChange, db: Session = Depends(get_db)):
+def change_status(
+    incident_id: int,
+    body: IncidentStatusChange,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Muda o estado respeitando o fluxo permitido"""
     incident = get_incident_or_404(incident_id, db)
     current = incident.status
@@ -224,7 +235,7 @@ def change_status(incident_id: int, body: IncidentStatusChange, db: Session = De
     incident.updates.append(
         IncidentUpdate(
             created_at=t,
-            author=body.author,
+            author=user.name,
             from_status=current,
             to_status=body.status,
             note=body.note,
@@ -235,11 +246,16 @@ def change_status(incident_id: int, body: IncidentStatusChange, db: Session = De
 
 
 @router.post("/{incident_id}/notes", response_model=IncidentDetail)
-def add_note(incident_id: int, body: IncidentNote, db: Session = Depends(get_db)):
+def add_note(
+    incident_id: int,
+    body: IncidentNote,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Acrescenta uma nota à cronologia"""
     incident = get_incident_or_404(incident_id, db)
     t = now()
-    incident.updates.append(IncidentUpdate(created_at=t, author=body.author, note=body.note))
+    incident.updates.append(IncidentUpdate(created_at=t, author=user.name, note=body.note))
     incident.updated_at = t
     db.commit()
     return get_incident_or_404(incident_id, db)

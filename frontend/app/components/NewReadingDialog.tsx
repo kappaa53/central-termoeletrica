@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { CURRENT_USER } from '@/app/lib/currentUser';
+import { useAuth } from '@/app/lib/auth';
 import {
   createReading,
   type Group,
@@ -65,7 +65,9 @@ type NewReadingDialogProps = {
 export default function NewReadingDialog({ groups, onClose, onCreated }: NewReadingDialogProps) {
   const [groupCode, setGroupCode] = useState(groups[0]?.code ?? '');
   const [timestamp, setTimestamp] = useState(localNow);
-  const [operator, setOperator] = useState(CURRENT_USER);
+  const { user } = useAuth();
+  // Por omissão, o utilizador autenticado (pode registar em nome de outro operador)
+  const [operator, setOperator] = useState(user?.name ?? '');
   const [status, setStatus] = useState<ReadingInput['status']>('Em operação');
   const [values, setValues] = useState<Partial<Record<NumericField, string>>>({});
   const [submitting, setSubmitting] = useState(false);

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, desc, func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.auth import ROLE_ADMIN, get_current_user, require_roles
 from app.core.database import get_db
 from app.models.alert import (
     ALERT_ACKNOWLEDGED,
@@ -17,8 +18,8 @@ from app.models.alert import (
 )
 from app.models.alert_threshold import AlertThreshold
 from app.models.group import Group
+from app.models.user import User
 from app.schemas.alert import (
-    AlertAction,
     AlertPage,
     AlertResponse,
     AlertSummary,
@@ -122,7 +123,11 @@ def alerts_summary(db: Session = Depends(get_db)):
 
 
 @router.post("/{alert_id}/acknowledge", response_model=AlertResponse)
-def acknowledge_alert(alert_id: int, body: AlertAction, db: Session = Depends(get_db)):
+def acknowledge_alert(
+    alert_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Reconhece um alerta ativo"""
     alert = get_alert_or_404(alert_id, db)
     if alert.status != ALERT_ACTIVE:
@@ -130,7 +135,7 @@ def acknowledge_alert(alert_id: int, body: AlertAction, db: Session = Depends(ge
 
     alert.status = ALERT_ACKNOWLEDGED
     alert.acknowledged_at = now()
-    alert.acknowledged_by = body.user
+    alert.acknowledged_by = user.name
     alert.updated_at = alert.acknowledged_at
     db.commit()
     db.refresh(alert)
@@ -138,7 +143,11 @@ def acknowledge_alert(alert_id: int, body: AlertAction, db: Session = Depends(ge
 
 
 @router.post("/{alert_id}/resolve", response_model=AlertResponse)
-def resolve_alert(alert_id: int, body: AlertAction, db: Session = Depends(get_db)):
+def resolve_alert(
+    alert_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Resolve manualmente um alerta aberto"""
     alert = get_alert_or_404(alert_id, db)
     if alert.status == ALERT_RESOLVED:
@@ -146,14 +155,18 @@ def resolve_alert(alert_id: int, body: AlertAction, db: Session = Depends(get_db
 
     alert.status = ALERT_RESOLVED
     alert.resolved_at = now()
-    alert.resolved_by = body.user
+    alert.resolved_by = user.name
     alert.updated_at = alert.resolved_at
     db.commit()
     db.refresh(alert)
     return to_response([alert], db)[0]
 
 
-@router.post("/rebuild", response_model=RebuildResult)
+@router.post(
+    "/rebuild",
+    response_model=RebuildResult,
+    dependencies=[Depends(require_roles(ROLE_ADMIN))],
+)
 def rebuild(db: Session = Depends(get_db)):
     """Recalcula todos os alertas a partir do histórico de leituras.
 

@@ -1,17 +1,20 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.database import engine
 from app.routers import (
     alerts,
+    auth,
     dashboard,
     groups,
     incidents,
     maintenance,
     readings,
     thresholds,
+    users,
 )
 
 
@@ -29,14 +32,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Incluir os routers
-app.include_router(groups.router)
-app.include_router(readings.router)
-app.include_router(dashboard.router)
-app.include_router(alerts.router)
-app.include_router(thresholds.router)
-app.include_router(incidents.router)
-app.include_router(maintenance.router)
+# Autenticação (pública) e gestão de utilizadores (administradores)
+app.include_router(auth.router)
+app.include_router(users.router)
+
+# Restantes routers: exigem sessão iniciada
+authenticated = [Depends(get_current_user)]
+for module in (groups, readings, dashboard, alerts, thresholds, incidents, maintenance):
+    app.include_router(module.router, dependencies=authenticated)
 
 
 @app.get("/")

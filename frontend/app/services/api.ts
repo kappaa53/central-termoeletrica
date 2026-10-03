@@ -1,5 +1,38 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
+// ============ SESSÃO ============
+const TOKEN_KEY = 'ct.token';
+export const AUTH_EXPIRED_EVENT = 'ct:auth-expired';
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // armazenamento indisponível: a sessão dura apenas enquanto a página estiver aberta
+  }
+}
+
+// fetch com o token de acesso; um 401 termina a sessão
+async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const token = getToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(input, { ...init, headers });
+  if (response.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+  }
+  return response;
+}
+
 // ============ TIPOS ============
 export interface Group {
   id: number;
@@ -150,7 +183,7 @@ export interface AlertThreshold {
 export type ReadingInput = {
   group_code: string;
   timestamp?: string;
-  operator: string;
+  operator?: string;
   status: 'Em operação' | 'Parado' | 'Manutenção';
 } & Partial<
   Pick<
@@ -184,13 +217,13 @@ export interface ReadingCreateResult {
 
 // ============ GRUPOS ============
 export async function getGroups(): Promise<Group[]> {
-  const response = await fetch(`${API_BASE}/groups/`);
+  const response = await authFetch(`${API_BASE}/groups/`);
   if (!response.ok) throw new Error('Failed to fetch groups');
   return response.json();
 }
 
 export async function getGroupByCode(code: string): Promise<Group> {
-  const response = await fetch(`${API_BASE}/groups/${code}`);
+  const response = await authFetch(`${API_BASE}/groups/${code}`);
   if (!response.ok) throw new Error('Failed to fetch group');
   return response.json();
 }
@@ -203,26 +236,26 @@ export async function getReadings(filters: ReadingFilters = {}): Promise<Reading
   if (status) params.set('status', status);
   if (start) params.set('start', start);
   if (end) params.set('end', end);
-  const response = await fetch(`${API_BASE}/readings/?${params}`);
+  const response = await authFetch(`${API_BASE}/readings/?${params}`);
   if (!response.ok) throw new Error('Failed to fetch readings');
   return response.json();
 }
 
 export async function getGroupReadings(code: string, limit = 24): Promise<OperationalReading[]> {
-  const response = await fetch(`${API_BASE}/groups/${code}/readings?limit=${limit}`);
+  const response = await authFetch(`${API_BASE}/groups/${code}/readings?limit=${limit}`);
   if (!response.ok) throw new Error('Failed to fetch group readings');
   return response.json();
 }
 
 export async function getLatestReading(code: string): Promise<OperationalReading | null> {
-  const response = await fetch(`${API_BASE}/groups/${code}/readings/latest`);
+  const response = await authFetch(`${API_BASE}/groups/${code}/readings/latest`);
   if (!response.ok) throw new Error('Failed to fetch latest reading');
   return response.json();
 }
 
 // ============ DASHBOARD ============
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-  const response = await fetch(`${API_BASE}/dashboard/summary`);
+  const response = await authFetch(`${API_BASE}/dashboard/summary`);
   if (!response.ok) throw new Error('Failed to fetch dashboard summary');
   return response.json();
 }
@@ -245,43 +278,39 @@ export async function getAlerts(filters: AlertFilters = {}): Promise<AlertPage> 
   if (groupCode) params.set('group_code', groupCode);
   if (status) params.set('status', status);
   if (severity) params.set('severity', severity);
-  const response = await fetch(`${API_BASE}/alerts/?${params}`);
+  const response = await authFetch(`${API_BASE}/alerts/?${params}`);
   if (!response.ok) throw await apiError(response, 'Failed to fetch alerts');
   return response.json();
 }
 
 export async function getAlertSummary(): Promise<AlertSummary> {
-  const response = await fetch(`${API_BASE}/alerts/summary`);
+  const response = await authFetch(`${API_BASE}/alerts/summary`);
   if (!response.ok) throw await apiError(response, 'Failed to fetch alert summary');
   return response.json();
 }
 
-async function alertAction(alertId: number, action: 'acknowledge' | 'resolve', user: string) {
-  const response = await fetch(`${API_BASE}/alerts/${alertId}/${action}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user }),
-  });
+async function alertAction(alertId: number, action: 'acknowledge' | 'resolve') {
+  const response = await authFetch(`${API_BASE}/alerts/${alertId}/${action}`, { method: 'POST' });
   if (!response.ok) throw await apiError(response, `Failed to ${action} alert`);
   return (await response.json()) as Alert;
 }
 
-export function acknowledgeAlert(alertId: number, user = 'Operador'): Promise<Alert> {
-  return alertAction(alertId, 'acknowledge', user);
+export function acknowledgeAlert(alertId: number): Promise<Alert> {
+  return alertAction(alertId, 'acknowledge');
 }
 
-export function resolveAlert(alertId: number, user = 'Operador'): Promise<Alert> {
-  return alertAction(alertId, 'resolve', user);
+export function resolveAlert(alertId: number): Promise<Alert> {
+  return alertAction(alertId, 'resolve');
 }
 
 export async function getThresholds(): Promise<AlertThreshold[]> {
-  const response = await fetch(`${API_BASE}/thresholds/`);
+  const response = await authFetch(`${API_BASE}/thresholds/`);
   if (!response.ok) throw await apiError(response, 'Failed to fetch thresholds');
   return response.json();
 }
 
 export async function createReading(input: ReadingInput): Promise<ReadingCreateResult> {
-  const response = await fetch(`${API_BASE}/readings/`, {
+  const response = await authFetch(`${API_BASE}/readings/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -361,7 +390,6 @@ export interface IncidentInput {
   type: IncidentType;
   severity: IncidentSeverity;
   description: string;
-  operator: string;
 }
 
 // Transições permitidas (espelha INCIDENT_TRANSITIONS no backend)
@@ -374,7 +402,7 @@ export const INCIDENT_TRANSITIONS: Record<IncidentStatus, IncidentStatus[]> = {
 };
 
 async function request<T>(path: string, init: RequestInit | undefined, fallback: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await authFetch(`${API_BASE}${path}`, {
     ...init,
     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
   });
@@ -417,15 +445,15 @@ export function editIncident(
 
 export function changeIncidentStatus(
   id: number,
-  body: { status: IncidentStatus; author: string; note?: string; cause?: string; solution?: string },
+  body: { status: IncidentStatus; note?: string; cause?: string; solution?: string },
 ): Promise<IncidentDetail> {
   return request(`/incidents/${id}/status`, { method: 'POST', body: JSON.stringify(body) }, 'Erro ao mudar o estado');
 }
 
-export function addIncidentNote(id: number, author: string, note: string): Promise<IncidentDetail> {
+export function addIncidentNote(id: number, note: string): Promise<IncidentDetail> {
   return request(
     `/incidents/${id}/notes`,
-    { method: 'POST', body: JSON.stringify({ author, note }) },
+    { method: 'POST', body: JSON.stringify({ note }) },
     'Erro ao adicionar a nota',
   );
 }
@@ -532,6 +560,102 @@ export function cancelMaintenance(id: number, reason: string): Promise<Maintenan
     { method: 'POST', body: JSON.stringify({ reason }) },
     'Erro ao cancelar a manutenção',
   );
+}
+
+// ============ LIMITES DE ALARME ============
+export type ThresholdInput = Pick<
+  AlertThreshold,
+  'warning_min' | 'warning_max' | 'critical_min' | 'critical_max' | 'active'
+>;
+
+export function updateThreshold(id: number, input: ThresholdInput): Promise<AlertThreshold> {
+  return request(`/thresholds/${id}`, { method: 'PUT', body: JSON.stringify(input) }, 'Erro ao guardar o limite');
+}
+
+export function rebuildAlerts(): Promise<{ total_alerts: number }> {
+  return request('/alerts/rebuild', { method: 'POST' }, 'Erro ao recalcular alertas');
+}
+
+// ============ AUTENTICAÇÃO E UTILIZADORES ============
+export type RoleName = 'ADMIN' | 'GESTOR' | 'OPERADOR';
+
+export interface Role {
+  id: number;
+  name: RoleName;
+  description: string | null;
+}
+
+export interface User {
+  id: number;
+  name: string;
+  username: string;
+  role: Role;
+  active: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface LoginResult {
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+  user: User;
+}
+
+export async function login(username: string, password: string): Promise<LoginResult> {
+  const response = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!response.ok) throw await apiError(response, 'Não foi possível iniciar sessão');
+  return response.json();
+}
+
+export function getMe(): Promise<User> {
+  return request('/auth/me', undefined, 'Sessão inválida');
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const response = await authFetch(`${API_BASE}/auth/me/password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!response.ok) throw await apiError(response, 'Erro ao alterar a palavra-passe');
+}
+
+export function getUsers(): Promise<User[]> {
+  return request('/users/', undefined, 'Erro ao carregar utilizadores');
+}
+
+export function getRoles(): Promise<Role[]> {
+  return request('/users/roles', undefined, 'Erro ao carregar perfis');
+}
+
+export function createUser(input: {
+  name: string;
+  username: string;
+  role: RoleName;
+  password: string;
+}): Promise<User> {
+  return request('/users/', { method: 'POST', body: JSON.stringify(input) }, 'Erro ao criar o utilizador');
+}
+
+export function updateUser(
+  id: number,
+  changes: Partial<{ name: string; role: RoleName; active: boolean }>,
+): Promise<User> {
+  return request(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(changes) }, 'Erro ao atualizar');
+}
+
+export async function resetUserPassword(id: number, newPassword: string): Promise<void> {
+  const response = await authFetch(`${API_BASE}/users/${id}/password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+  if (!response.ok) throw await apiError(response, 'Erro ao redefinir a palavra-passe');
 }
 
 // ============ ESTATÍSTICAS ============

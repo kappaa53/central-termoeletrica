@@ -7,6 +7,7 @@ import MaintenanceFormDialog from '@/app/components/MaintenanceFormDialog';
 import Pagination from '@/app/components/Pagination';
 import Modal, { Field, FormActions, fieldClass, filterClass } from '@/app/components/ui/Modal';
 import { useGroups } from '@/app/hooks/useGroups';
+import { MANAGEMENT_ROLES, useAuth } from '@/app/lib/auth';
 import { useMaintenance } from '@/app/hooks/useOperations';
 import {
   formatCurrency,
@@ -44,6 +45,8 @@ type MaintenanceListProps = {
 
 export default function MaintenanceList({ fixedGroupCode, onChanged }: MaintenanceListProps) {
   const { groups } = useGroups();
+  const { hasRole } = useAuth();
+  const canManage = hasRole(...MANAGEMENT_ROLES);
   const [status, setStatus] = useState<StatusFilter>('PENDING');
   const [type, setType] = useState<MaintenanceType | ''>('');
   const [groupCode, setGroupCode] = useState('');
@@ -99,14 +102,16 @@ export default function MaintenanceList({ fixedGroupCode, onChanged }: Maintenan
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Agendar manutenção
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Agendar manutenção
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -167,7 +172,7 @@ export default function MaintenanceList({ fixedGroupCode, onChanged }: Maintenan
               showGroup={!fixedGroupCode}
               onStart={() => handleStart(m)}
               onComplete={() => setCompleting(m)}
-              onCancel={() => setCancelling(m)}
+              onCancel={canManage ? () => setCancelling(m) : undefined}
             />
           ))
         )}
@@ -208,7 +213,8 @@ function MaintenanceCard({
   showGroup: boolean;
   onStart: () => void;
   onComplete: () => void;
-  onCancel: () => void;
+  // Ausente para quem não pode cancelar (operadores)
+  onCancel?: () => void;
 }) {
   const pending = m.status === 'AGENDADA' || m.status === 'EM_ANDAMENTO';
 
@@ -288,13 +294,15 @@ function MaintenanceCard({
             >
               Concluir
             </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100"
-            >
-              Cancelar
-            </button>
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -330,7 +338,7 @@ function CompleteDialog({ order, onClose, onDone }: { order: Maintenance; onClos
     <Modal title={`Concluir: ${order.title}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="grid gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Custo real (€)">
+          <Field label="Custo real (MT)">
             <input type="number" min="0" step="1" value={cost} onChange={(e) => setCost(e.target.value)} className={fieldClass} />
           </Field>
           <Field label="Horas de trabalho">

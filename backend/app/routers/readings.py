@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.group import Group as GroupModel
 from app.models.operational_reading import OperationalReading as ReadingModel
+from app.models.user import User
 from app.schemas.reading import (
     OperationalReadingCreate,
     OperationalReadingResponse,
@@ -74,16 +76,22 @@ def get_latest_reading(
 
 
 @router.post("/", response_model=ReadingCreateResult, status_code=201)
-def create_reading(body: OperationalReadingCreate, db: Session = Depends(get_db)):
+def create_reading(
+    body: OperationalReadingCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Regista uma leitura e avalia os alertas do grupo"""
     group = db.scalars(select(GroupModel).where(GroupModel.code == body.group_code)).first()
     if not group:
         raise HTTPException(status_code=404, detail=f"Grupo {body.group_code} não encontrado")
 
-    data = body.model_dump(exclude={"group_code", "timestamp"})
+    data = body.model_dump(exclude={"group_code", "timestamp", "operator"})
     reading = ReadingModel(
         group_id=group.id,
         timestamp=body.timestamp.replace(tzinfo=None) if body.timestamp else now(),
+        # Por omissão, o operador é o utilizador autenticado
+        operator=(body.operator or "").strip() or user.name,
         **data,
     )
     db.add(reading)

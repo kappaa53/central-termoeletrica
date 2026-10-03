@@ -14,7 +14,7 @@ import {
   maintenanceStatuses,
   Pill,
 } from '@/app/lib/constants/operations';
-import { CURRENT_USER } from '@/app/lib/currentUser';
+import { MANAGEMENT_ROLES, useAuth } from '@/app/lib/auth';
 import { formatDateTime } from '@/app/lib/format';
 import {
   addIncidentNote,
@@ -28,6 +28,7 @@ import {
 
 export default function IncidentDetailPage() {
   const id = Number(useParams().id);
+  const { hasRole } = useAuth();
 
   const [incident, setIncident] = useState<IncidentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +77,7 @@ export default function IncidentDetailPage() {
     }
     try {
       setActionError(null);
-      setIncident(await changeIncidentStatus(incident.id, { status: to, author: CURRENT_USER }));
+      setIncident(await changeIncidentStatus(incident.id, { status: to }));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erro ao mudar o estado');
     }
@@ -215,7 +216,7 @@ export default function IncidentDetailPage() {
           <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-slate-900">Manutenção</h2>
-              {!closed && (
+              {!closed && hasRole(...MANAGEMENT_ROLES) && (
                 <button
                   type="button"
                   onClick={() => setScheduling(true)}
@@ -304,7 +305,7 @@ function NoteForm({ incidentId, onAdded }: { incidentId: number; onAdded: (i: In
     try {
       setSubmitting(true);
       setError(null);
-      onAdded(await addIncidentNote(incidentId, CURRENT_USER, note.trim()));
+      onAdded(await addIncidentNote(incidentId, note.trim()));
       setNote('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao adicionar a nota');
@@ -360,7 +361,6 @@ function TransitionDialog({
       onDone(
         await changeIncidentStatus(incident.id, {
           status: to,
-          author: CURRENT_USER,
           note: note.trim() || undefined,
           ...(resolving ? { cause: cause.trim(), solution: solution.trim() } : {}),
         }),

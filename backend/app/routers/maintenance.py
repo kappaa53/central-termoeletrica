@@ -6,10 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.auth import MANAGEMENT, get_current_user, require_roles
 from app.core.database import get_db
 from app.models.group import Group
 from app.models.incident import Incident, IncidentUpdate
 from app.models.maintenance import MAINTENANCE_PENDING_STATUSES, MaintenanceOrder
+from app.models.user import User
 from app.schemas.maintenance import (
     MaintenanceCancel,
     MaintenanceComplete,
@@ -27,7 +29,6 @@ router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 
 GROUP_MAINTENANCE = "Manutenção"
 GROUP_STOPPED = "Parado"
-SYSTEM_AUTHOR = "Sistema"
 
 
 def get_order_or_404(order_id: int, db: Session) -> MaintenanceOrder:
@@ -37,13 +38,15 @@ def get_order_or_404(order_id: int, db: Session) -> MaintenanceOrder:
     return order
 
 
-def log_on_incident(order: MaintenanceOrder, note: str, new_status: str | None = None) -> None:
+def log_on_incident(
+    order: MaintenanceOrder, author: str, note: str, new_status: str | None = None
+) -> None:
     """Regista na cronologia da ocorrência associada (se existir)."""
     incident = order.incident
     if incident is None or incident.status == "FECHADA":
         return
     t = now()
-    update = IncidentUpdate(created_at=t, author=SYSTEM_AUTHOR, note=note)
+    update = IncidentUpdate(created_at=t, author=author, note=note)
     if new_status and new_status != incident.status:
         update.from_status = incident.status
         update.to_status = new_status
@@ -153,7 +156,11 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=MaintenanceResponse, status_code=201)
-def create_order(body: MaintenanceCreate, db: Session = Depends(get_db)):
+def create_order(
+    body: MaintenanceCreate,
+    user: User = Depends(require_roles(*MANAGEMENT)),
+    db: Session = Depends(get_db),
+):
     """Agenda uma ordem de manutenção"""
     group = db.scalars(select(Group).where(Group.code == body.group_code)).first()
     if not group:
@@ -170,12 +177,16 @@ def create_order(body: MaintenanceCreate, db: Session = Depends(get_db)):
     order = MaintenanceOrder(group_id=group.id, status="AGENDADA", created_at=t, updated_at=t, **data)
     db.add(order)
     db.flush()
-    log_on_incident(order, f"Ordem de manutenção #{order.id} agendada: {order.title}")
+    log_on_incident(order, user.name, f"Ordem de manutenção #{order.id} agendada: {order.title}")
     db.commit()
     return get_order_or_404(order.id, db)
 
 
-@router.patch("/{order_id}", response_model=MaintenanceResponse)
+@router.patch(
+    "/{order_id}",
+    response_model=MaintenanceResponse,
+    dependencies=[Depends(require_roles(*MANAGEMENT))],
+)
 def edit_order(order_id: int, body: MaintenanceEdit, db: Session = Depends(get_db)):
     """Edita uma ordem ainda não concluída/cancelada"""
     order = get_order_or_404(order_id, db)
@@ -192,7 +203,12 @@ def edit_order(order_id: int, body: MaintenanceEdit, db: Session = Depends(get_d
 
 
 @router.post("/{order_id}/start", response_model=MaintenanceResponse)
-def start_order(order_id: int, body: MaintenanceStart, db: Session = Depends(get_db)):
+def start_order(
+    order_id: int,
+    body: MaintenanceStart,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Inicia a execução da ordem"""
     order = get_order_or_404(order_id, db)
     if order.status != "AGENDADA":
@@ -208,14 +224,19 @@ def start_order(order_id: int, body: MaintenanceStart, db: Session = Depends(get
     # Ocorrência associada passa a "em execução"
     incident = order.incident
     new_status = "EM_EXECUCAO" if incident and incident.status in ("ABERTA", "EM_ANALISE") else None
-    log_on_incident(order, f"Ordem de manutenção #{order.id} iniciada", new_status)
+    log_on_incident(order, user.name, f"Ordem de manutenção #{order.id} iniciada", new_status)
 
     db.commit()
     return get_order_or_404(order_id, db)
 
 
 @router.post("/{order_id}/complete", response_model=MaintenanceResponse)
-def complete_order(order_id: int, body: MaintenanceComplete, db: Session = Depends(get_db)):
+def complete_order(
+    order_id: int,
+    body: MaintenanceComplete,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Conclui a ordem e regista custos/horas"""
     order = get_order_or_404(order_id, db)
     if order.status not in MAINTENANCE_PENDING_STATUSES:
@@ -235,14 +256,19 @@ def complete_order(order_id: int, body: MaintenanceComplete, db: Session = Depen
         order.notes = f"{order.notes}\n{body.notes}" if order.notes else body.notes
 
     release_group(order, db)
-    log_on_incident(order, f"Ordem de manutenção #{order.id} concluída")
+    log_on_incident(order, user.name, f"Ordem de manutenção #{order.id} concluída")
 
     db.commit()
     return get_order_or_404(order_id, db)
 
 
 @router.post("/{order_id}/cancel", response_model=MaintenanceResponse)
-def cancel_order(order_id: int, body: MaintenanceCancel, db: Session = Depends(get_db)):
+def cancel_order(
+    order_id: int,
+    body: MaintenanceCancel,
+    user: User = Depends(require_roles(*MANAGEMENT)),
+    db: Session = Depends(get_db),
+):
     """Cancela uma ordem pendente"""
     order = get_order_or_404(order_id, db)
     if order.status not in MAINTENANCE_PENDING_STATUSES:
@@ -257,7 +283,7 @@ def cancel_order(order_id: int, body: MaintenanceCancel, db: Session = Depends(g
 
     if was_running:
         release_group(order, db)
-    log_on_incident(order, f"Ordem de manutenção #{order.id} cancelada ({body.reason})")
+    log_on_incident(order, user.name, f"Ordem de manutenção #{order.id} cancelada ({body.reason})")
 
     db.commit()
     return get_order_or_404(order_id, db)

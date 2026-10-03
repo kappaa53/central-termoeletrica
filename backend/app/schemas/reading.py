@@ -48,7 +48,7 @@ class OperationalReadingCreate(BaseModel):
 
     group_code: str
     timestamp: Optional[datetime] = None  # por omissão: agora
-    operator: str = Field(min_length=1, max_length=100)
+    operator: Optional[str] = Field(None, max_length=100)
     status: Literal["Em operação", "Parado", "Manutenção"]
     operating_hours: Optional[float] = Field(None, ge=0)
     power: Optional[float] = Field(None, ge=0, le=10)

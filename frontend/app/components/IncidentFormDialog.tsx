@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Modal, { Field, FormActions, fieldClass } from '@/app/components/ui/Modal';
 import { useGroups } from '@/app/hooks/useGroups';
 import { incidentSeverities, incidentTypes } from '@/app/lib/constants/operations';
-import { CURRENT_USER } from '@/app/lib/currentUser';
+import { useAuth } from '@/app/lib/auth';
 import {
   createIncident,
   type IncidentInput,
@@ -24,13 +24,13 @@ type IncidentFormDialogProps = {
 export default function IncidentFormDialog({ onClose, initial, fixedGroupCode }: IncidentFormDialogProps) {
   const router = useRouter();
   const { groups } = useGroups();
+  const { user } = useAuth();
 
   const [groupCode, setGroupCode] = useState(fixedGroupCode ?? initial?.group_code ?? '');
   const [title, setTitle] = useState(initial?.title ?? '');
   const [type, setType] = useState<IncidentType>(initial?.type ?? 'MECANICA');
   const [severity, setSeverity] = useState<IncidentSeverity>(initial?.severity ?? 'MEDIA');
   const [description, setDescription] = useState(initial?.description ?? '');
-  const [operator, setOperator] = useState(initial?.operator ?? CURRENT_USER);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +46,6 @@ export default function IncidentFormDialog({ onClose, initial, fixedGroupCode }:
         type,
         severity,
         description: description.trim(),
-        operator: operator.trim(),
       });
       router.push(`/incidents/${incident.id}`);
     } catch (err) {
@@ -84,7 +83,7 @@ export default function IncidentFormDialog({ onClose, initial, fixedGroupCode }:
             </select>
           </Field>
           <Field label="Reportada por">
-            <input value={operator} onChange={(e) => setOperator(e.target.value)} className={fieldClass} required />
+            <input value={user?.name ?? ''} className={`${fieldClass} bg-slate-50 text-slate-500`} disabled />
           </Field>
         </div>
 

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import MANAGEMENT, require_roles
 from app.core.database import get_db
 from app.models.alert_threshold import AlertThreshold
 from app.schemas.alert import ThresholdResponse, ThresholdUpdate
@@ -19,7 +20,11 @@ def list_thresholds(db: Session = Depends(get_db)):
     return db.scalars(select(AlertThreshold).order_by(AlertThreshold.id)).all()
 
 
-@router.put("/{threshold_id}", response_model=ThresholdResponse)
+@router.put(
+    "/{threshold_id}",
+    response_model=ThresholdResponse,
+    dependencies=[Depends(require_roles(*MANAGEMENT))],
+)
 def update_threshold(threshold_id: int, body: ThresholdUpdate, db: Session = Depends(get_db)):
     """Atualiza os limites de um parâmetro"""
     t = db.get(AlertThreshold, threshold_id)

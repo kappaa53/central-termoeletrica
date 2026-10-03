@@ -70,7 +70,6 @@ class IncidentCreate(BaseModel):
     type: IncidentType
     severity: IncidentSeverity
     description: str = Field(min_length=1)
-    operator: str = Field(min_length=1, max_length=100)
 
 
 class IncidentEdit(BaseModel):
@@ -84,7 +83,6 @@ class IncidentEdit(BaseModel):
 
 class IncidentStatusChange(BaseModel):
     status: IncidentStatus
-    author: str = Field(min_length=1, max_length=100)
     note: Optional[str] = None
     # Permite preencher causa/solução no mesmo passo (ex.: ao resolver)
     cause: Optional[str] = None
@@ -92,7 +90,6 @@ class IncidentStatusChange(BaseModel):
 
 
 class IncidentNote(BaseModel):
-    author: str = Field(min_length=1, max_length=100)
     note: str = Field(min_length=1)
 
 

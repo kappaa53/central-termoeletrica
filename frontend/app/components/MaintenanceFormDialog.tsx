@@ -150,7 +150,7 @@ export default function MaintenanceFormDialog({
               required
             />
           </Field>
-          <Field label="Custo estimado (€)">
+          <Field label="Custo estimado (MT)">
             <input
               type="number"
               min="0"

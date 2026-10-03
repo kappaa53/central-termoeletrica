@@ -70,5 +70,6 @@ export function Pill({ style }: { style: Style }) {
 
 export function formatCurrency(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
-  return value.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  // Metical moçambicano (MZN), escrito habitualmente como "MT"
+  return `${value.toLocaleString('pt-MZ', { maximumFractionDigits: 0 })} MT`;
 }

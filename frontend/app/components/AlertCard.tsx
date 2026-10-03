@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ExclamationTriangleIcon, XCircleIcon } from '@heroicons/react/24/solid';
 import IncidentFormDialog from '@/app/components/IncidentFormDialog';
-import { CURRENT_USER } from '@/app/lib/currentUser';
 import { formatDateTime, formatNumber } from '@/app/lib/format';
 import {
   acknowledgeAlert,
@@ -75,7 +74,7 @@ export default function AlertCard({ alert, showGroup = true, onChanged }: AlertC
     try {
       setBusy(true);
       setError(null);
-      await action(alert.id, CURRENT_USER);
+      await action(alert.id);
       onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao atualizar o alerta');

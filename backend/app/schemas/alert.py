@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class AlertResponse(BaseModel):
@@ -43,10 +43,6 @@ class AlertSummary(BaseModel):
     warning_open: int
     groups_with_open_alerts: list[str]
     groups_with_critical_alerts: list[str]
-
-
-class AlertAction(BaseModel):
-    user: str = Field("Operador", min_length=1, max_length=100)
 
 
 class RebuildResult(BaseModel):
