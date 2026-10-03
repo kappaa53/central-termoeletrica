@@ -2,20 +2,42 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ExclamationTriangleIcon, XCircleIcon } from "@heroicons/react/24/solid";
+import AlertCard from "@/app/components/AlertCard";
 import Badge from "@/app/components/ui/Badge";
 import { toGroupStatus } from "@/app/lib/constants/statuses";
 import { formatDateTime, formatNumber, formatTime } from "@/app/lib/format";
-import { DashboardSummary, getDashboardSummary } from "@/app/services/api";
+import {
+  Alert,
+  AlertSummary,
+  DashboardSummary,
+  getAlerts,
+  getAlertSummary,
+  getDashboardSummary,
+} from "@/app/services/api";
 
 export default function Home() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [alertSummary, setAlertSummary] = useState<AlertSummary | null>(null);
+  const [openAlerts, setOpenAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [alertsVersion, setAlertsVersion] = useState(0);
 
   useEffect(() => {
     getDashboardSummary()
       .then(setSummary)
       .catch(() => setError("Não foi possível carregar os dados da central."));
   }, []);
+
+  useEffect(() => {
+    getAlertSummary().then(setAlertSummary).catch(console.error);
+    getAlerts({ status: "OPEN", limit: 5 })
+      .then((page) => setOpenAlerts(page.items))
+      .catch(console.error);
+  }, [alertsVersion]);
+
+  const groupsWithAlerts = new Set(alertSummary?.groups_with_open_alerts ?? []);
+  const groupsWithCritical = new Set(alertSummary?.groups_with_critical_alerts ?? []);
 
   if (error) {
     return (
@@ -91,7 +113,22 @@ export default function Home() {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-lg font-semibold">{group.code}</div>
+                  <div className="flex items-center gap-1.5 text-lg font-semibold">
+                    {group.code}
+                    {groupsWithCritical.has(group.code) ? (
+                      <XCircleIcon
+                        className="h-4 w-4 text-red-600"
+                        aria-label="Tem alertas críticos abertos"
+                      />
+                    ) : (
+                      groupsWithAlerts.has(group.code) && (
+                        <ExclamationTriangleIcon
+                          className="h-4 w-4 text-amber-500"
+                          aria-label="Tem alertas abertos"
+                        />
+                      )
+                    )}
+                  </div>
 
                   <div className="mt-1 text-sm text-slate-500">
                     {group.manufacturer}
@@ -131,16 +168,44 @@ export default function Home() {
 
       <section className="mt-8 grid gap-6 xl:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div>
-            <h2 className="font-semibold">Alertas recentes</h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold">Alertas abertos</h2>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Últimos eventos que requerem atenção
-            </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Eventos que requerem atenção
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {alertSummary && alertSummary.critical_open > 0 && (
+                <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700">
+                  {alertSummary.critical_open} crítico(s)
+                </span>
+              )}
+              <Link
+                href="/alerts"
+                className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
+              >
+                {alertSummary?.open ?? 0} abertos →
+              </Link>
+            </div>
           </div>
 
-          <div className="mt-5 rounded-lg bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-            Monitorização automática de alertas em desenvolvimento.
+          <div className="mt-5 space-y-3">
+            {openAlerts.length === 0 ? (
+              <div className="rounded-lg bg-emerald-50 px-4 py-10 text-center text-sm text-emerald-700">
+                Sem alertas abertos. Todos os parâmetros dentro dos limites.
+              </div>
+            ) : (
+              openAlerts.map((alert) => (
+                <AlertCard
+                  key={alert.id}
+                  alert={alert}
+                  onChanged={() => setAlertsVersion((v) => v + 1)}
+                />
+              ))
+            )}
           </div>
         </div>
 

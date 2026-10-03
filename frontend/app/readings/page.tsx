@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import NewReadingDialog from "@/app/components/NewReadingDialog";
 import Pagination from "@/app/components/Pagination";
 import ReadingsTable from "@/app/components/ReadingsTable";
 import { useGroups } from "@/app/hooks/useGroups";
@@ -26,8 +27,9 @@ export default function ReadingsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [page, setPage] = useState(0);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  const { readings, total, pageCount, loading, error } = useReadings(
+  const { readings, total, pageCount, loading, error, reload } = useReadings(
     {
       groupCode: groupCode || undefined,
       status: status || undefined,
@@ -146,9 +148,8 @@ export default function ReadingsPage() {
             )}
             <button
               type="button"
-              onClick={() =>
-                window.alert("O formulário de nova leitura será criado na próxima etapa.")
-              }
+              onClick={() => setDialogOpen(true)}
+              disabled={groups.length === 0}
               className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
             >
               Nova leitura
@@ -181,6 +182,17 @@ export default function ReadingsPage() {
           onChange={setPage}
         />
       </section>
+
+      {dialogOpen && (
+        <NewReadingDialog
+          groups={groups}
+          onClose={() => setDialogOpen(false)}
+          onCreated={() => {
+            setPage(0);
+            reload();
+          }}
+        />
+      )}
     </div>
   );
 }

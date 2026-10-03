@@ -5,7 +5,9 @@ from sqlalchemy import select
 
 from app.core.database import SessionLocal
 from app.models.group import Group
+from app.models.alert import ALERT_ACKNOWLEDGED, Alert
 from app.models.operational_reading import OperationalReading
+from app.services.alert_engine import now as engine_now, rebuild_alerts
 
 
 # ============================================================
@@ -28,6 +30,30 @@ READING_HOURS = [
 ]
 
 random = Random(42)
+
+# Anomalias injetadas nas leituras mais recentes para demonstrar os alertas.
+# Chave: código do grupo -> {posição a contar do fim (-1 = última): valores}
+SCENARIOS = {
+    # Óleo a aquecer: aviso que escala para crítico (fica ativo)
+    "GG2": {
+        -4: {"oil_temperature": 88.5},
+        -3: {"oil_temperature": 90.8},
+        -2: {"oil_temperature": 93.1},
+        -1: {"oil_temperature": 96.4},
+    },
+    # Pressão do óleo a descer (aviso ativo)
+    "GG7": {-2: {"oil_pressure": 3.4}, -1: {"oil_pressure": 3.1}},
+    # Temperatura de admissão elevada (aviso ativo, será reconhecido)
+    "GG8": {-2: {"intake_temperature": 46.5}, -1: {"intake_temperature": 47.2}},
+    # Pico de temperatura da água (crítico, resolvido automaticamente)
+    "GG1": {-6: {"water_temperature": 94.2}, -5: {"water_temperature": 99.1}},
+    # Escape esquerdo elevado (aviso resolvido)
+    "GG5": {-12: {"exhaust_temp_left": 572.0}},
+    # Sobrecarga (aviso resolvido)
+    "GG9": {-20: {"power": 2.52}},
+    # Frequência baixa (aviso resolvido)
+    "GG3": {-40: {"frequency": 49.35}},
+}
 
 
 # ============================================================
@@ -205,6 +231,7 @@ def seed_readings():
                 print("Operação cancelada.")
                 return
 
+            db.query(Alert).delete()
             db.query(OperationalReading).delete()
             db.commit()
 
@@ -266,6 +293,11 @@ def seed_readings():
                             or energy_produced
                         )
 
+            for position, overrides in SCENARIOS.get(group.code, {}).items():
+                if len(group_readings) >= -position:
+                    for attr, value in overrides.items():
+                        setattr(group_readings[position], attr, value)
+
             db.add_all(group_readings)
             db.flush()
 
@@ -277,6 +309,25 @@ def seed_readings():
 
         db.commit()
 
+        # Gerar os alertas a partir do histórico
+        total_alerts = rebuild_alerts(db)
+
+        # Simular um alerta já reconhecido por um operador
+        acknowledged = (
+            db.query(Alert)
+            .join(Group)
+            .filter(Group.code == "GG8", Alert.parameter == "intake_temperature")
+            .filter(Alert.status == "ACTIVE")
+            .first()
+        )
+        if acknowledged:
+            acknowledged.status = ALERT_ACKNOWLEDGED
+            acknowledged.acknowledged_by = "Carlos Manuel"
+            acknowledged.acknowledged_at = engine_now()
+            acknowledged.updated_at = acknowledged.acknowledged_at
+
+        db.commit()
+
         print()
         print("=" * 60)
         print("SEED CONCLUÍDO COM SUCESSO")
@@ -285,6 +336,7 @@ def seed_readings():
         print(f"Dias:               {DAYS}")
         print(f"Leituras por dia:   {READINGS_PER_DAY}")
         print(f"Total de leituras:  {total_inserted}")
+        print(f"Alertas gerados:    {total_alerts}")
         print("=" * 60)
 
     except Exception as exc:

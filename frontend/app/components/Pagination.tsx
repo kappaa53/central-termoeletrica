@@ -6,13 +6,21 @@ type PaginationProps = {
   total: number;
   shown: number;
   onChange: (page: number) => void;
+  itemLabel?: string;
 };
 
-export default function Pagination({ page, pageCount, total, shown, onChange }: PaginationProps) {
+export default function Pagination({
+  page,
+  pageCount,
+  total,
+  shown,
+  onChange,
+  itemLabel = 'leituras',
+}: PaginationProps) {
   return (
     <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
       <span>
-        A mostrar {shown} de {total.toLocaleString('pt-PT')} leituras
+        A mostrar {shown} de {total.toLocaleString('pt-PT')} {itemLabel}
       </span>
 
       <div className="flex items-center gap-2">

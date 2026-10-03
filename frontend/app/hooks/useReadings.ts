@@ -1,7 +1,7 @@
 // frontend/app/hooks/useReadings.ts
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getReadings, OperationalReading, ReadingFilters } from '@/app/services/api';
 
 export const READINGS_PAGE_SIZE = 50;
@@ -12,6 +12,7 @@ export function useReadings(filters: Omit<ReadingFilters, 'limit' | 'offset'>, p
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
 
   const { groupCode, status, start, end } = filters;
 
@@ -42,9 +43,12 @@ export function useReadings(filters: Omit<ReadingFilters, 'limit' | 'offset'>, p
     return () => {
       cancelled = true;
     };
-  }, [groupCode, status, start, end, page]);
+  }, [groupCode, status, start, end, page, version]);
+
+  // Recarregar depois de registar uma nova leitura
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
 
   const pageCount = Math.max(1, Math.ceil(total / READINGS_PAGE_SIZE));
 
-  return { readings, total, pageCount, loading, error };
+  return { readings, total, pageCount, loading, error, reload };
 }

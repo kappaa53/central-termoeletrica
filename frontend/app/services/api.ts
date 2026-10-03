@@ -85,19 +85,101 @@ export interface DashboardSummary {
   groups: DashboardGroup[];
 }
 
+// Espelha backend/app/schemas/alert.py
+export type AlertSeverity = 'WARNING' | 'CRITICAL';
+export type AlertStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED';
+
 export interface Alert {
   id: number;
   group_id: number;
-  group_code: string;
-  type: 'CRITICAL' | 'WARNING' | 'INFO';
-  message: string;
+  group_code: string | null;
+  reading_id: number | null;
   parameter: string;
+  parameter_label: string | null;
+  unit: string | null;
+  severity: AlertSeverity;
+  message: string;
   value: number;
   threshold: number;
-  status: 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED';
+  status: AlertStatus;
   created_at: string;
-  resolved_at: string | null;
+  updated_at: string;
+  acknowledged_at: string | null;
   acknowledged_by: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
+export interface AlertPage {
+  items: Alert[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AlertFilters {
+  groupCode?: string;
+  status?: AlertStatus | 'OPEN';
+  severity?: AlertSeverity;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AlertSummary {
+  open: number;
+  active: number;
+  acknowledged: number;
+  critical_open: number;
+  warning_open: number;
+  groups_with_open_alerts: string[];
+  groups_with_critical_alerts: string[];
+}
+
+export interface AlertThreshold {
+  id: number;
+  parameter: string;
+  label: string;
+  unit: string;
+  warning_min: number | null;
+  warning_max: number | null;
+  critical_min: number | null;
+  critical_max: number | null;
+  active: boolean;
+}
+
+export type ReadingInput = {
+  group_code: string;
+  timestamp?: string;
+  operator: string;
+  status: 'Em operação' | 'Parado' | 'Manutenção';
+} & Partial<
+  Pick<
+    OperationalReading,
+    | 'operating_hours'
+    | 'power'
+    | 'frequency'
+    | 'voltage'
+    | 'current_r'
+    | 'current_s'
+    | 'current_t'
+    | 'power_factor'
+    | 'reactive_power'
+    | 'energy_produced'
+    | 'exhaust_temp_right'
+    | 'exhaust_temp_left'
+    | 'oil_temperature'
+    | 'oil_pressure'
+    | 'water_temperature'
+    | 'intake_temperature'
+  >
+>;
+
+export interface ReadingCreateResult {
+  reading: OperationalReading;
+  evaluated: boolean;
+  alerts_created: number;
+  alerts_escalated: number;
+  alerts_resolved: number;
 }
 
 // ============ GRUPOS ============
@@ -146,29 +228,68 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
 }
 
 // ============ ALERTAS ============
-// TODO (Fase 3): endpoints /alerts ainda não existem no backend.
-export async function getAlerts(groupCode?: string): Promise<Alert[]> {
-  const url = groupCode 
-    ? `${API_BASE}/alerts?group_code=${groupCode}`
-    : `${API_BASE}/alerts`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Failed to fetch alerts');
+// Extrai a mensagem de erro devolvida pela API (FastAPI: { detail })
+async function apiError(response: Response, fallback: string): Promise<Error> {
+  try {
+    const body = await response.json();
+    if (typeof body.detail === 'string') return new Error(body.detail);
+  } catch {
+    // corpo sem JSON
+  }
+  return new Error(fallback);
+}
+
+export async function getAlerts(filters: AlertFilters = {}): Promise<AlertPage> {
+  const { groupCode, status, severity, limit = 50, offset = 0 } = filters;
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (groupCode) params.set('group_code', groupCode);
+  if (status) params.set('status', status);
+  if (severity) params.set('severity', severity);
+  const response = await fetch(`${API_BASE}/alerts/?${params}`);
+  if (!response.ok) throw await apiError(response, 'Failed to fetch alerts');
   return response.json();
 }
 
-export async function acknowledgeAlert(alertId: number): Promise<void> {
-  const response = await fetch(`${API_BASE}/alerts/${alertId}/acknowledge`, {
-    method: 'POST',
-  });
-  if (!response.ok) throw new Error('Failed to acknowledge alert');
+export async function getAlertSummary(): Promise<AlertSummary> {
+  const response = await fetch(`${API_BASE}/alerts/summary`);
+  if (!response.ok) throw await apiError(response, 'Failed to fetch alert summary');
+  return response.json();
 }
 
-export async function resolveAlert(alertId: number): Promise<void> {
-  const response = await fetch(`${API_BASE}/alerts/${alertId}/resolve`, {
+async function alertAction(alertId: number, action: 'acknowledge' | 'resolve', user: string) {
+  const response = await fetch(`${API_BASE}/alerts/${alertId}/${action}`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user }),
   });
-  if (!response.ok) throw new Error('Failed to resolve alert');
+  if (!response.ok) throw await apiError(response, `Failed to ${action} alert`);
+  return (await response.json()) as Alert;
 }
+
+export function acknowledgeAlert(alertId: number, user = 'Operador'): Promise<Alert> {
+  return alertAction(alertId, 'acknowledge', user);
+}
+
+export function resolveAlert(alertId: number, user = 'Operador'): Promise<Alert> {
+  return alertAction(alertId, 'resolve', user);
+}
+
+export async function getThresholds(): Promise<AlertThreshold[]> {
+  const response = await fetch(`${API_BASE}/thresholds/`);
+  if (!response.ok) throw await apiError(response, 'Failed to fetch thresholds');
+  return response.json();
+}
+
+export async function createReading(input: ReadingInput): Promise<ReadingCreateResult> {
+  const response = await fetch(`${API_BASE}/readings/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw await apiError(response, 'Erro ao registar a leitura');
+  return response.json();
+}
+
 // ============ OCORRÊNCIAS ============
 export interface Incident {
   id: number;

@@ -6,6 +6,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.database import SessionLocal
 from app.models.group import Group
+from app.models.alert import Alert
 from app.models.operational_reading import OperationalReading
 from decimal import Decimal
 
@@ -53,6 +54,7 @@ def seed_groups():
                 return
             
             # Remover leituras (dependem dos grupos) e grupos existentes
+            db.query(Alert).delete()
             db.query(OperationalReading).delete()
             db.query(Group).delete()
             print(f"🗑️  {existing} grupos removidos.")

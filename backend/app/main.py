@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import engine
-from app.routers import dashboard, groups, readings
+from app.routers import alerts, dashboard, groups, readings, thresholds
 
 
 app = FastAPI(
@@ -25,6 +25,8 @@ app.add_middleware(
 app.include_router(groups.router)
 app.include_router(readings.router)
 app.include_router(dashboard.router)
+app.include_router(alerts.router)
+app.include_router(thresholds.router)
 
 
 @app.get("/")

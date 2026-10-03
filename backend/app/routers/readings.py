@@ -2,14 +2,20 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.models.group import Group as GroupModel
 from app.models.operational_reading import OperationalReading as ReadingModel
-from app.schemas.reading import OperationalReadingResponse, ReadingPage
+from app.schemas.reading import (
+    OperationalReadingCreate,
+    OperationalReadingResponse,
+    ReadingCreateResult,
+    ReadingPage,
+)
+from app.services.alert_engine import evaluate_reading, is_latest_reading, now
 
 
 router = APIRouter(prefix="/readings", tags=["readings"])
@@ -65,3 +71,43 @@ def get_latest_reading(
         .order_by(desc(ReadingModel.timestamp))
         .limit(1)
     ).first()
+
+
+@router.post("/", response_model=ReadingCreateResult, status_code=201)
+def create_reading(body: OperationalReadingCreate, db: Session = Depends(get_db)):
+    """Regista uma leitura e avalia os alertas do grupo"""
+    group = db.scalars(select(GroupModel).where(GroupModel.code == body.group_code)).first()
+    if not group:
+        raise HTTPException(status_code=404, detail=f"Grupo {body.group_code} não encontrado")
+
+    data = body.model_dump(exclude={"group_code", "timestamp"})
+    reading = ReadingModel(
+        group_id=group.id,
+        timestamp=body.timestamp.replace(tzinfo=None) if body.timestamp else now(),
+        **data,
+    )
+    db.add(reading)
+    db.flush()
+
+    # O estado da última leitura passa a ser o estado atual do grupo
+    evaluated = is_latest_reading(db, reading)
+    created = escalated = resolved = 0
+    if evaluated:
+        group.status = reading.status
+        result = evaluate_reading(db, reading)
+        created, escalated, resolved = (
+            len(result.created),
+            len(result.escalated),
+            len(result.resolved),
+        )
+
+    db.commit()
+    db.refresh(reading)
+
+    return ReadingCreateResult(
+        reading=reading,
+        evaluated=evaluated,
+        alerts_created=created,
+        alerts_escalated=escalated,
+        alerts_resolved=resolved,
+    )
