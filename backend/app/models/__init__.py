@@ -5,6 +5,8 @@ from app.models.group import Group
 from app.models.operational_reading import OperationalReading
 from app.models.alert_threshold import AlertThreshold
 from app.models.alert import Alert
+from app.models.incident import Incident, IncidentUpdate
+from app.models.maintenance import MaintenanceOrder
 
 __all__ = [
     "Base",
@@ -14,4 +16,7 @@ __all__ = [
     "OperationalReading",
     "AlertThreshold",
     "Alert",
+    "Incident",
+    "IncidentUpdate",
+    "MaintenanceOrder",
 ]

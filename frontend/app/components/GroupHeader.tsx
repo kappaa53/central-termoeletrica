@@ -5,15 +5,17 @@ import Badge from '@/app/components/ui/Badge';
 import { toGroupStatus } from '@/app/lib/constants/statuses';
 import type { Group } from '@/app/services/api';
 
-type Tab = 'overview' | 'readings' | 'alerts';
+export type GroupTab = 'overview' | 'readings' | 'alerts' | 'incidents' | 'maintenance';
 
-const tabs: { id: Tab; label: string; path: string }[] = [
+const tabs: { id: GroupTab; label: string; path: string }[] = [
   { id: 'overview', label: 'Visão Geral', path: '' },
   { id: 'readings', label: 'Leituras', path: '/readings' },
   { id: 'alerts', label: 'Alertas', path: '/alerts' },
+  { id: 'incidents', label: 'Ocorrências', path: '/incidents' },
+  { id: 'maintenance', label: 'Manutenção', path: '/maintenance' },
 ];
 
-export default function GroupHeader({ group, active }: { group: Group; active: Tab }) {
+export default function GroupHeader({ group, active }: { group: Group; active: GroupTab }) {
   return (
     <>
       <div className="mb-6">
@@ -32,7 +34,7 @@ export default function GroupHeader({ group, active }: { group: Group; active: T
       </div>
 
       <div className="mb-6 border-b border-slate-200">
-        <nav className="flex space-x-8">
+        <nav className="flex space-x-8 overflow-x-auto">
           {tabs.map((tab) => (
             <Link
               key={tab.id}

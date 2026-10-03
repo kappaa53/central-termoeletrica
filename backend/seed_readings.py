@@ -199,7 +199,7 @@ def generate_reading(
 # SEED
 # ============================================================
 
-def seed_readings():
+def seed_readings(force: bool = False):
     db = SessionLocal()
 
     try:
@@ -223,7 +223,7 @@ def seed_readings():
                 f"ATENÇÃO: já existem {existing_count} leituras."
             )
 
-            response = input(
+            response = "s" if force else input(
                 "Deseja apagar as leituras existentes? [s/N]: "
             ).strip().lower()
 

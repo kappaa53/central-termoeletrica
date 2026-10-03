@@ -7,10 +7,12 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from app.core.database import SessionLocal
 from app.models.group import Group
 from app.models.alert import Alert
+from app.models.incident import Incident
+from app.models.maintenance import MaintenanceOrder
 from app.models.operational_reading import OperationalReading
 from decimal import Decimal
 
-def seed_groups():
+def seed_groups(force: bool = False):
     db = SessionLocal()
     try:
         # Dados dos grupos
@@ -48,12 +50,14 @@ def seed_groups():
         existing = db.query(Group).count()
         if existing > 0:
             print(f"⚠️  Já existem {existing} grupos no banco de dados.")
-            resposta = input("Deseja recriar todos os grupos? (s/N): ")
+            resposta = 's' if force else input("Deseja recriar todos os grupos? (s/N): ")
             if resposta.lower() != 's':
                 print("❌ Operação cancelada.")
                 return
             
             # Remover leituras (dependem dos grupos) e grupos existentes
+            db.query(MaintenanceOrder).delete()
+            db.query(Incident).delete()
             db.query(Alert).delete()
             db.query(OperationalReading).delete()
             db.query(Group).delete()

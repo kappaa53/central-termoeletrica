@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ExclamationTriangleIcon, XCircleIcon } from '@heroicons/react/24/solid';
+import IncidentFormDialog from '@/app/components/IncidentFormDialog';
 import { CURRENT_USER } from '@/app/lib/currentUser';
 import { formatDateTime, formatNumber } from '@/app/lib/format';
 import {
@@ -11,7 +12,15 @@ import {
   type Alert,
   type AlertSeverity,
   type AlertStatus,
+  type IncidentType,
 } from '@/app/services/api';
+
+// Parâmetros elétricos/operacionais vs. mecânicos (para pré-preencher a ocorrência)
+const incidentTypeByParameter: Record<string, IncidentType> = {
+  frequency: 'ELETRICA',
+  voltage: 'ELETRICA',
+  load_pct: 'OPERACIONAL',
+};
 
 export const severityConfig: Record<
   AlertSeverity,
@@ -54,6 +63,7 @@ type AlertCardProps = {
 export default function AlertCard({ alert, showGroup = true, onChanged }: AlertCardProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openingIncident, setOpeningIncident] = useState(false);
 
   const sev = severityConfig[alert.severity];
   const Icon = sev.icon;
@@ -125,29 +135,56 @@ export default function AlertCard({ alert, showGroup = true, onChanged }: AlertC
           </div>
         </div>
 
-        {!resolved && (
-          <div className="flex shrink-0 gap-2">
-            {alert.status === 'ACTIVE' && (
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setOpeningIncident(true)}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+          >
+            Abrir ocorrência
+          </button>
+          {!resolved && (
+            <>
+              {alert.status === 'ACTIVE' && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => run(acknowledgeAlert)}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Reconhecer
+                </button>
+              )}
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => run(acknowledgeAlert)}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                onClick={() => run(resolveAlert)}
+                className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-50"
               >
-                Reconhecer
+                Resolver
               </button>
-            )}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => run(resolveAlert)}
-              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-50"
-            >
-              Resolver
-            </button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
+
+      {openingIncident && (
+        <IncidentFormDialog
+          onClose={() => setOpeningIncident(false)}
+          initial={{
+            group_code: alert.group_code ?? undefined,
+            alert_id: alert.id,
+            title: alert.message,
+            type: incidentTypeByParameter[alert.parameter] ?? 'MECANICA',
+            severity: alert.severity === 'CRITICAL' ? 'CRITICA' : 'MEDIA',
+            description: `${alert.parameter_label}: ${formatNumber(alert.value, unit, digits)} (limite ${formatNumber(
+              alert.threshold,
+              unit,
+              digits,
+            )}) em ${formatDateTime(alert.created_at)}.`,
+          }}
+        />
+      )}
     </div>
   );
 }

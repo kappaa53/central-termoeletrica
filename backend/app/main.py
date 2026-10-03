@@ -4,7 +4,15 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import engine
-from app.routers import alerts, dashboard, groups, readings, thresholds
+from app.routers import (
+    alerts,
+    dashboard,
+    groups,
+    incidents,
+    maintenance,
+    readings,
+    thresholds,
+)
 
 
 app = FastAPI(
@@ -27,6 +35,8 @@ app.include_router(readings.router)
 app.include_router(dashboard.router)
 app.include_router(alerts.router)
 app.include_router(thresholds.router)
+app.include_router(incidents.router)
+app.include_router(maintenance.router)
 
 
 @app.get("/")

@@ -291,302 +291,248 @@ export async function createReading(input: ReadingInput): Promise<ReadingCreateR
 }
 
 // ============ OCORRÊNCIAS ============
+// Espelha backend/app/schemas/incident.py
+export type IncidentType = 'ELETRICA' | 'MECANICA' | 'OPERACIONAL' | 'SEGURANCA' | 'OUTROS';
+export type IncidentSeverity = 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
+export type IncidentStatus = 'ABERTA' | 'EM_ANALISE' | 'EM_EXECUCAO' | 'RESOLVIDA' | 'FECHADA';
+
 export interface Incident {
   id: number;
   group_id: number;
-  group_code: string;
+  group_code: string | null;
+  alert_id: number | null;
   title: string;
-  type: 'ELETRICA' | 'MECANICA' | 'OPERACIONAL' | 'SEGURANCA' | 'OUTROS';
-  severity: 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
-  status: 'ABERTA' | 'EM_ANALISE' | 'EM_EXECUCAO' | 'RESOLVIDA' | 'FECHADA';
+  type: IncidentType;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
   description: string;
   cause: string | null;
   solution: string | null;
   operator: string;
   opened_at: string;
   resolved_at: string | null;
+  closed_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
-// Funções API (MOCK por enquanto)
-export async function getIncidents(groupCode?: string): Promise<Incident[]> {
-  // Simular delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-  
-  // Retornar dados MOCK
-  return groupCode
-    ? MOCK_INCIDENTS.filter(inc => inc.group_code === groupCode)
-    : MOCK_INCIDENTS;
+export interface IncidentUpdate {
+  id: number;
+  created_at: string;
+  author: string;
+  from_status: IncidentStatus | null;
+  to_status: IncidentStatus | null;
+  note: string | null;
 }
 
-export async function getIncidentById(id: number): Promise<Incident | null> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const incident = MOCK_INCIDENTS.find(inc => inc.id === id);
-  return incident || null;
+export interface IncidentDetail extends Incident {
+  updates: IncidentUpdate[];
+  maintenance_orders: { id: number; title: string; status: MaintenanceStatus; scheduled_date: string }[];
 }
 
-export async function createIncident(data: Partial<Incident>): Promise<Incident> {
-  await new Promise(resolve => setTimeout(resolve, 500));
-  const newIncident: Incident = {
-    id: MOCK_INCIDENTS.length + 1,
-    group_id: data.group_id || 1,
-    group_code: data.group_code || 'GG1',
-    title: data.title || 'Nova ocorrência',
-    type: data.type || 'OPERACIONAL',
-    severity: data.severity || 'MEDIA',
-    status: 'ABERTA',
-    description: data.description || '',
-    cause: null,
-    solution: null,
-    operator: data.operator || 'Usuário',
-    opened_at: new Date().toISOString(),
-    resolved_at: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  MOCK_INCIDENTS.unshift(newIncident);
-  return newIncident;
+export interface IncidentPage {
+  items: Incident[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
-export async function updateIncidentStatus(id: number, status: Incident['status']): Promise<Incident> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const incident = MOCK_INCIDENTS.find(inc => inc.id === id);
-  if (!incident) throw new Error('Incidente não encontrado');
-  
-  incident.status = status;
-  if (status === 'RESOLVIDA' || status === 'FECHADA') {
-    incident.resolved_at = new Date().toISOString();
+export interface IncidentFilters {
+  groupCode?: string;
+  status?: IncidentStatus | 'OPEN';
+  severity?: IncidentSeverity;
+  type?: IncidentType;
+  limit?: number;
+  offset?: number;
+}
+
+export interface IncidentSummary {
+  open: number;
+  critical_open: number;
+  by_status: Record<IncidentStatus, number>;
+  resolved_last_30d: number;
+  avg_resolution_hours: number | null;
+}
+
+export interface IncidentInput {
+  group_code: string;
+  alert_id?: number | null;
+  title: string;
+  type: IncidentType;
+  severity: IncidentSeverity;
+  description: string;
+  operator: string;
+}
+
+// Transições permitidas (espelha INCIDENT_TRANSITIONS no backend)
+export const INCIDENT_TRANSITIONS: Record<IncidentStatus, IncidentStatus[]> = {
+  ABERTA: ['EM_ANALISE', 'EM_EXECUCAO', 'RESOLVIDA'],
+  EM_ANALISE: ['EM_EXECUCAO', 'RESOLVIDA'],
+  EM_EXECUCAO: ['EM_ANALISE', 'RESOLVIDA'],
+  RESOLVIDA: ['FECHADA', 'ABERTA'],
+  FECHADA: [],
+};
+
+async function request<T>(path: string, init: RequestInit | undefined, fallback: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+  });
+  if (!response.ok) throw await apiError(response, fallback);
+  return response.json();
+}
+
+function toQuery(params: Record<string, string | number | boolean | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') q.set(key, String(value));
   }
-  incident.updated_at = new Date().toISOString();
-  return incident;
+  return q.toString();
 }
 
-// Dados MOCK
-const MOCK_INCIDENTS: Incident[] = [
-  {
-    id: 1,
-    group_id: 1,
-    group_code: 'GG1',
-    title: 'Superaquecimento do motor',
-    type: 'MECANICA',
-    severity: 'ALTA',
-    status: 'EM_EXECUCAO',
-    description: 'Temperatura do óleo atingiu 97°C durante operação normal. Sistema de refrigeração apresentou falha.',
-    cause: 'Válvula termostática com defeito',
-    solution: 'Substituição da válvula em andamento',
-    operator: 'Carlos Manuel',
-    opened_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    resolved_at: null,
-    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 2,
-    group_id: 2,
-    group_code: 'GG2',
-    title: 'Vibração excessiva no eixo',
-    type: 'MECANICA',
-    severity: 'CRITICA',
-    status: 'EM_ANALISE',
-    description: 'Medição de vibração acima do limite operacional. Possível desalinhamento.',
-    cause: null,
-    solution: null,
-    operator: 'Nelson Cadete',
-    opened_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-    resolved_at: null,
-    created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 3,
-    group_id: 3,
-    group_code: 'GG3',
-    title: 'Falha no sistema de partida',
-    type: 'ELETRICA',
-    severity: 'MEDIA',
-    status: 'ABERTA',
-    description: 'Motor não inicia na tentativa de partida. Bateria apresenta baixa tensão.',
-    cause: null,
-    solution: null,
-    operator: 'Ana Júlia',
-    opened_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-    resolved_at: null,
-    created_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 4,
-    group_id: 4,
-    group_code: 'GG4',
-    title: 'Vazamento de óleo no cárter',
-    type: 'MECANICA',
-    severity: 'BAIXA',
-    status: 'RESOLVIDA',
-    description: 'Pequeno vazamento identificado na junta do cárter.',
-    cause: 'Junta ressecada por tempo de uso',
-    solution: 'Substituição da junta e limpeza da área',
-    operator: 'Carlos Manuel',
-    opened_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    resolved_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 5,
-    group_id: 8,
-    group_code: 'GG8',
-    title: 'Sobrecarga no gerador',
-    type: 'OPERACIONAL',
-    severity: 'ALTA',
-    status: 'EM_EXECUCAO',
-    description: 'Potência ativa excedeu 2.3 MW durante pico de demanda.',
-    cause: 'Demanda elevada na rede',
-    solution: 'Redistribuição de carga entre os grupos',
-    operator: 'Ana Júlia',
-    opened_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-    resolved_at: null,
-    created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  },
-];
+export function getIncidents(filters: IncidentFilters = {}): Promise<IncidentPage> {
+  const { groupCode, status, severity, type, limit = 25, offset = 0 } = filters;
+  const q = toQuery({ group_code: groupCode, status, severity, type, limit, offset });
+  return request(`/incidents/?${q}`, undefined, 'Erro ao carregar ocorrências');
+}
 
+export function getIncidentSummary(): Promise<IncidentSummary> {
+  return request('/incidents/summary', undefined, 'Erro ao carregar resumo de ocorrências');
+}
+
+export function getIncident(id: number): Promise<IncidentDetail> {
+  return request(`/incidents/${id}`, undefined, 'Erro ao carregar a ocorrência');
+}
+
+export function createIncident(input: IncidentInput): Promise<IncidentDetail> {
+  return request('/incidents/', { method: 'POST', body: JSON.stringify(input) }, 'Erro ao criar a ocorrência');
+}
+
+export function editIncident(
+  id: number,
+  changes: Partial<Pick<Incident, 'title' | 'type' | 'severity' | 'description' | 'cause' | 'solution'>>,
+): Promise<IncidentDetail> {
+  return request(`/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(changes) }, 'Erro ao guardar');
+}
+
+export function changeIncidentStatus(
+  id: number,
+  body: { status: IncidentStatus; author: string; note?: string; cause?: string; solution?: string },
+): Promise<IncidentDetail> {
+  return request(`/incidents/${id}/status`, { method: 'POST', body: JSON.stringify(body) }, 'Erro ao mudar o estado');
+}
+
+export function addIncidentNote(id: number, author: string, note: string): Promise<IncidentDetail> {
+  return request(
+    `/incidents/${id}/notes`,
+    { method: 'POST', body: JSON.stringify({ author, note }) },
+    'Erro ao adicionar a nota',
+  );
+}
 
 // ============ MANUTENÇÃO ============
+// Espelha backend/app/schemas/maintenance.py
+export type MaintenanceType = 'PREVENTIVA' | 'CORRETIVA' | 'PREDITIVA' | 'URGENTE';
+export type MaintenancePriority = 'BAIXA' | 'MEDIA' | 'ALTA';
+export type MaintenanceStatus = 'AGENDADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'CANCELADA';
+
 export interface Maintenance {
   id: number;
   group_id: number;
-  group_code: string;
-  type: 'PREVENTIVA' | 'CORRETIVA' | 'PREDITIVA' | 'URGENTE';
+  group_code: string | null;
+  incident_id: number | null;
+  type: MaintenanceType;
   title: string;
   description: string;
-  priority: 'BAIXA' | 'MEDIA' | 'ALTA';
-  status: 'AGENDADA' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'CANCELADA';
+  priority: MaintenancePriority;
+  status: MaintenanceStatus;
   scheduled_date: string;
+  started_at: string | null;
   completed_date: string | null;
   technician: string;
   estimated_cost: number | null;
   actual_cost: number | null;
   work_hours: number | null;
   notes: string | null;
+  overdue: boolean;
   created_at: string;
   updated_at: string;
 }
 
-// Funções API (MOCK por enquanto)
-const MOCK_MAINTENANCE: Maintenance[] = [
-  {
-    id: 1,
-    group_id: 1,
-    group_code: 'GG1',
-    type: 'PREVENTIVA',
-    title: 'Troca de óleo e filtros',
-    description: 'Manutenção preventiva conforme plano de manutenção',
-    priority: 'MEDIA',
-    status: 'CONCLUIDA',
-    scheduled_date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    completed_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    technician: 'Carlos Manuel',
-    estimated_cost: 2500,
-    actual_cost: 2300,
-    work_hours: 4,
-    notes: 'Óleo e filtros substituídos com sucesso',
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 2,
-    group_id: 2,
-    group_code: 'GG2',
-    type: 'CORRETIVA',
-    title: 'Substituição de válvula termostática',
-    description: 'Válvula apresentando falha, substituição necessária',
-    priority: 'ALTA',
-    status: 'EM_ANDAMENTO',
-    scheduled_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    completed_date: null,
-    technician: 'Nelson Cadete',
-    estimated_cost: 1500,
-    actual_cost: null,
-    work_hours: null,
-    notes: 'Aguardando peça',
-    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 3,
-    group_id: 3,
-    group_code: 'GG3',
-    type: 'PREDITIVA',
-    title: 'Análise de vibração',
-    description: 'Monitoramento preditivo para detectar desgaste',
-    priority: 'BAIXA',
-    status: 'AGENDADA',
-    scheduled_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    completed_date: null,
-    technician: 'Ana Júlia',
-    estimated_cost: 800,
-    actual_cost: null,
-    work_hours: null,
-    notes: 'Agendado para próxima semana',
-    created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 4,
-    group_id: 4,
-    group_code: 'GG4',
-    type: 'URGENTE',
-    title: 'Vazamento de óleo no cárter',
-    description: 'Vazamento identificado, intervenção imediata necessária',
-    priority: 'ALTA',
-    status: 'AGENDADA',
-    scheduled_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-    completed_date: null,
-    technician: 'Carlos Manuel',
-    estimated_cost: 3000,
-    actual_cost: null,
-    work_hours: null,
-    notes: 'Prioridade alta, equipe em alerta',
-    created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 5,
-    group_id: 8,
-    group_code: 'GG8',
-    type: 'PREVENTIVA',
-    title: 'Revisão geral do gerador',
-    description: 'Revisão completa conforme manual do fabricante',
-    priority: 'MEDIA',
-    status: 'CONCLUIDA',
-    scheduled_date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    completed_date: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
-    technician: 'Ana Júlia',
-    estimated_cost: 5000,
-    actual_cost: 4800,
-    work_hours: 8,
-    notes: 'Todas as especificações atendidas',
-    created_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
-
-export async function getMaintenance(groupCode?: string): Promise<Maintenance[]> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  if (groupCode) {
-    return MOCK_MAINTENANCE.filter(m => m.group_code === groupCode);
-  }
-  return MOCK_MAINTENANCE;
+export interface MaintenancePage {
+  items: Maintenance[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
-export async function getMaintenanceById(id: number): Promise<Maintenance | null> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const maintenance = MOCK_MAINTENANCE.find(m => m.id === id);
-  return maintenance || null;
+export interface MaintenanceFilters {
+  groupCode?: string;
+  status?: MaintenanceStatus | 'PENDING';
+  type?: MaintenanceType;
+  overdue?: boolean;
+  limit?: number;
+  offset?: number;
 }
 
+export interface MaintenanceSummary {
+  scheduled: number;
+  in_progress: number;
+  overdue: number;
+  completed_last_30d: number;
+  cost_last_30d: number;
+  estimated_pending_cost: number;
+}
 
+export interface MaintenanceInput {
+  group_code: string;
+  incident_id?: number | null;
+  type: MaintenanceType;
+  title: string;
+  description?: string;
+  priority: MaintenancePriority;
+  scheduled_date: string;
+  technician: string;
+  estimated_cost?: number | null;
+  notes?: string | null;
+}
+
+export function getMaintenance(filters: MaintenanceFilters = {}): Promise<MaintenancePage> {
+  const { groupCode, status, type, overdue, limit = 25, offset = 0 } = filters;
+  const q = toQuery({ group_code: groupCode, status, type, overdue, limit, offset });
+  return request(`/maintenance/?${q}`, undefined, 'Erro ao carregar a manutenção');
+}
+
+export function getMaintenanceSummary(): Promise<MaintenanceSummary> {
+  return request('/maintenance/summary', undefined, 'Erro ao carregar resumo de manutenção');
+}
+
+export function createMaintenance(input: MaintenanceInput): Promise<Maintenance> {
+  return request('/maintenance/', { method: 'POST', body: JSON.stringify(input) }, 'Erro ao agendar a manutenção');
+}
+
+export function startMaintenance(id: number, setGroupMaintenance = true): Promise<Maintenance> {
+  return request(
+    `/maintenance/${id}/start`,
+    { method: 'POST', body: JSON.stringify({ set_group_maintenance: setGroupMaintenance }) },
+    'Erro ao iniciar a manutenção',
+  );
+}
+
+export function completeMaintenance(
+  id: number,
+  body: { actual_cost?: number | null; work_hours?: number | null; notes?: string | null },
+): Promise<Maintenance> {
+  return request(`/maintenance/${id}/complete`, { method: 'POST', body: JSON.stringify(body) }, 'Erro ao concluir');
+}
+
+export function cancelMaintenance(id: number, reason: string): Promise<Maintenance> {
+  return request(
+    `/maintenance/${id}/cancel`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+    'Erro ao cancelar a manutenção',
+  );
+}
 
 // ============ ESTATÍSTICAS ============
 export interface StatisticsSummary {
