@@ -1,161 +1,126 @@
 // frontend/app/groups/[code]/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { getGroupByCode, Group } from '@/app/services/api';
-import Badge from '@/app/components/ui/Badge';
-import { toGroupStatus } from '@/app/lib/constants/statuses';
+import GroupHeader from '@/app/components/GroupHeader';
+import PowerChart from '@/app/components/PowerChart';
+import { useGroup } from '@/app/hooks/useGroup';
+import { averageCurrent, formatDateTime, formatNumber } from '@/app/lib/format';
 
 export default function GroupDetailPage() {
   const params = useParams();
   const code = params.code as string;
-  
-  const [group, setGroup] = useState<Group | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadGroup() {
-      try {
-        setLoading(true);
-        const data = await getGroupByCode(code);
-        setGroup(data);
-        setError(null);
-      } catch (err) {
-        setError('Erro ao carregar dados do grupo');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    if (code) {
-      loadGroup();
-    }
-  }, [code]);
+  // 48 leituras = 6 dias (8 leituras por dia)
+  const { group, latestReading: r, readings, loading, error } = useGroup(code, 48);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Carregando dados do {code}...</div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="text-slate-500">A carregar dados do {code}...</div>
       </div>
     );
   }
 
   if (error || !group) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <div className="text-red-500">{error || 'Grupo não encontrado'}</div>
       </div>
     );
   }
 
+  const loadPct = r?.power != null ? (r.power / group.nominal_power_mw) * 100 : null;
+
   return (
     <div className="p-6">
-      {/* Header do Grupo */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{group.code}</h1>
-            <p className="text-gray-600">
-              {group.manufacturer} - {group.engine_model || 'Modelo não informado'}
-            </p>
+      <GroupHeader group={group} active="overview" />
+
+      {/* Ficha técnica */}
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <InfoCard label="Potência nominal" value={formatNumber(group.nominal_power_mw, 'MW', 3)} />
+        <InfoCard label="Cilindros" value={String(group.cylinders)} />
+        <InfoCard label="Configuração" value={group.cylinder_configuration} />
+        <InfoCard label="Nº série" value={group.serial_number || 'N/A'} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Última leitura */}
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold">Última leitura</h2>
+            <span className="text-sm text-slate-500">{formatDateTime(r?.timestamp)}</span>
           </div>
-          <div className="flex items-center space-x-2">
-            <Badge status={toGroupStatus(group.status)} />
+
+          {r ? (
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <Metric label="Potência ativa" value={formatNumber(r.power, 'MW', 3)} />
+              <Metric label="Carga" value={formatNumber(loadPct, '%', 0)} />
+              <Metric label="Frequência" value={formatNumber(r.frequency, 'Hz', 2)} />
+              <Metric label="Tensão" value={formatNumber(r.voltage, 'V', 0)} />
+              <Metric label="Corrente média" value={formatNumber(averageCurrent(r), 'A', 0)} />
+              <Metric label="Fator de potência" value={formatNumber(r.power_factor, '', 2)} />
+              <Metric label="Potência reativa" value={formatNumber(r.reactive_power, 'MVAr', 3)} />
+              <Metric label="Temp. admissão" value={formatNumber(r.intake_temperature, '°C', 1)} />
+              <Metric label="Temp. óleo" value={formatNumber(r.oil_temperature, '°C', 1)} />
+              <Metric label="Pressão óleo" value={formatNumber(r.oil_pressure, 'bar', 1)} />
+              <Metric label="Temp. água" value={formatNumber(r.water_temperature, '°C', 1)} />
+              <Metric
+                label="Temp. escape (E / D)"
+                value={`${formatNumber(r.exhaust_temp_left, '', 0)} / ${formatNumber(r.exhaust_temp_right, '°C', 0)}`}
+              />
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-slate-400">Sem leituras registadas para este grupo.</p>
+          )}
+        </div>
+
+        {/* Resumo */}
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold">Resumo</h2>
+          <div className="space-y-3 text-sm">
+            <SummaryRow label="Fabricante" value={group.manufacturer} />
+            <SummaryRow label="Modelo" value={group.engine_model || '—'} />
+            <SummaryRow label="Horas de funcionamento" value={formatNumber(r?.operating_hours, 'h', 1)} />
+            <SummaryRow label="Energia acumulada" value={formatNumber(r?.energy_produced, 'MWh', 1)} />
+            <SummaryRow label="Último operador" value={r?.operator ?? '—'} />
           </div>
         </div>
       </div>
 
-      {/* Cards de Informações */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Potência Nominal</div>
-          <div className="text-xl font-semibold">{group.nominal_power_mw} MW</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Cilindros</div>
-          <div className="text-xl font-semibold">{group.cylinders}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Configuração</div>
-          <div className="text-xl font-semibold">{group.cylinder_configuration}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-sm text-gray-500">Nº Série</div>
-          <div className="text-xl font-semibold">{group.serial_number || 'N/A'}</div>
-        </div>
+      {/* Histórico de potência */}
+      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold">Potência ativa</h2>
+        <p className="mb-4 text-sm text-slate-500">Últimas {readings.length} leituras</p>
+        <PowerChart readings={readings} nominalPowerMw={group.nominal_power_mw} />
       </div>
+    </div>
+  );
+}
 
-      {/* Tabs Navigation */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="flex space-x-8">
-          <Link
-            href={`/groups/${code}`}
-            className="py-2 px-1 border-b-2 border-blue-500 text-blue-600 font-medium"
-          >
-            Visão Geral
-          </Link>
-          <Link
-            href={`/groups/${code}/alerts`}
-            className="py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-          >
-            Alertas
-          </Link>
-        </nav>
-      </div>
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="text-sm text-slate-500">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
 
-      {/* Conteúdo da Visão Geral */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Dados Operacionais - Mock por enquanto */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Dados Operacionais</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-gray-50 rounded">
-                <div className="text-sm text-gray-500">Temperatura do Motor</div>
-                <div className="text-2xl font-bold">-- °C</div>
-              </div>
-              <div className="p-4 bg-gray-50 rounded">
-                <div className="text-sm text-gray-500">Pressão do Óleo</div>
-                <div className="text-2xl font-bold">-- bar</div>
-              </div>
-              <div className="p-4 bg-gray-50 rounded">
-                <div className="text-sm text-gray-500">Carga Atual</div>
-                <div className="text-2xl font-bold">-- MW</div>
-              </div>
-              <div className="p-4 bg-gray-50 rounded">
-                <div className="text-sm text-gray-500">RPM</div>
-                <div className="text-2xl font-bold">--</div>
-              </div>
-            </div>
-            <div className="text-center text-gray-400 text-sm py-4">
-              Dados em tempo real em desenvolvimento
-            </div>
-          </div>
-        </div>
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-4">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="mt-1 text-lg font-bold tabular-nums text-slate-900">{value}</div>
+    </div>
+  );
+}
 
-        {/* Resumo Rápido */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Resumo</h2>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center pb-2 border-b">
-              <span className="text-gray-600">Status</span>
-              <Badge status={toGroupStatus(group.status)} />
-            </div>
-            <div className="flex justify-between items-center pb-2 border-b">
-              <span className="text-gray-600">Fabricante</span>
-              <span className="font-medium">{group.manufacturer}</span>
-            </div>
-            <div className="flex justify-between items-center pb-2 border-b">
-              <span className="text-gray-600">Última Leitura</span>
-              <span className="font-medium">--</span>
-            </div>
-          </div>
-        </div>
-      </div>
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+      <span className="text-slate-600">{label}</span>
+      <span className="font-medium">{value}</span>
     </div>
   );
 }

@@ -18,6 +18,7 @@ export interface Group {
 export interface OperationalReading {
   id: number;
   group_id: number;
+  group_code: string | null;
   timestamp: string;
   operator: string;
   status: string;
@@ -37,6 +38,51 @@ export interface OperationalReading {
   oil_pressure: number | null; // bar
   water_temperature: number | null; // °C
   intake_temperature: number | null; // °C
+}
+
+export interface ReadingPage {
+  items: OperationalReading[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ReadingFilters {
+  groupCode?: string;
+  status?: string;
+  start?: string; // ISO (YYYY-MM-DDTHH:mm:ss)
+  end?: string;
+  limit?: number;
+  offset?: number;
+}
+
+// Espelha backend/app/schemas/dashboard.py
+export interface DashboardGroup {
+  id: number;
+  code: string;
+  manufacturer: string;
+  nominal_power_mw: number;
+  status: string;
+  last_reading_at: string | null;
+  power_mw: number | null;
+  oil_temperature: number | null;
+  water_temperature: number | null;
+}
+
+export interface DashboardSummary {
+  total_groups: number;
+  operating_groups: number;
+  stopped_groups: number;
+  maintenance_groups: number;
+  installed_power_mw: number;
+  operating_capacity_mw: number;
+  current_power_mw: number;
+  availability_pct: number;
+  load_factor_pct: number;
+  operating_capacity_pct: number;
+  energy_24h_mwh: number;
+  last_reading_at: string | null;
+  groups: DashboardGroup[];
 }
 
 export interface Alert {
@@ -68,19 +114,34 @@ export async function getGroupByCode(code: string): Promise<Group> {
 }
 
 // ============ LEITURAS ============
-export async function getReadings(
-  { groupId, limit = 100 }: { groupId?: number; limit?: number } = {}
-): Promise<OperationalReading[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (groupId !== undefined) params.set('group_id', String(groupId));
+export async function getReadings(filters: ReadingFilters = {}): Promise<ReadingPage> {
+  const { groupCode, status, start, end, limit = 50, offset = 0 } = filters;
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (groupCode) params.set('group_code', groupCode);
+  if (status) params.set('status', status);
+  if (start) params.set('start', start);
+  if (end) params.set('end', end);
   const response = await fetch(`${API_BASE}/readings/?${params}`);
   if (!response.ok) throw new Error('Failed to fetch readings');
   return response.json();
 }
 
-export async function getLatestReading(groupId: number): Promise<OperationalReading | null> {
-  const response = await fetch(`${API_BASE}/readings/latest?group_id=${groupId}`);
+export async function getGroupReadings(code: string, limit = 24): Promise<OperationalReading[]> {
+  const response = await fetch(`${API_BASE}/groups/${code}/readings?limit=${limit}`);
+  if (!response.ok) throw new Error('Failed to fetch group readings');
+  return response.json();
+}
+
+export async function getLatestReading(code: string): Promise<OperationalReading | null> {
+  const response = await fetch(`${API_BASE}/groups/${code}/readings/latest`);
   if (!response.ok) throw new Error('Failed to fetch latest reading');
+  return response.json();
+}
+
+// ============ DASHBOARD ============
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  const response = await fetch(`${API_BASE}/dashboard/summary`);
+  if (!response.ok) throw new Error('Failed to fetch dashboard summary');
   return response.json();
 }
 

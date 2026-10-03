@@ -4,13 +4,13 @@
 import { useEffect, useState } from 'react';
 import {
   getGroupByCode,
+  getGroupReadings,
   getLatestReading,
-  getReadings,
   Group,
   OperationalReading,
 } from '@/app/services/api';
 
-export function useGroup(code: string) {
+export function useGroup(code: string, historySize = 24) {
   const [group, setGroup] = useState<Group | null>(null);
   const [latestReading, setLatestReading] = useState<OperationalReading | null>(null);
   const [readings, setReadings] = useState<OperationalReading[]>([]);
@@ -21,14 +21,13 @@ export function useGroup(code: string) {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const groupData = await getGroupByCode(code);
-        setGroup(groupData);
-
-        // Última leitura e histórico das últimas 24 leituras
-        const [latest, history] = await Promise.all([
-          getLatestReading(groupData.id),
-          getReadings({ groupId: groupData.id, limit: 24 }),
+        // Dados do grupo, última leitura e histórico recente
+        const [groupData, latest, history] = await Promise.all([
+          getGroupByCode(code),
+          getLatestReading(code),
+          getGroupReadings(code, historySize),
         ]);
+        setGroup(groupData);
         setLatestReading(latest);
         setReadings(history);
 
@@ -43,7 +42,7 @@ export function useGroup(code: string) {
     if (code) {
       fetchGroupData();
     }
-  }, [code]);
+  }, [code, historySize]);
 
   return { group, latestReading, readings, loading, error };
 }

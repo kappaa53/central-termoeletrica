@@ -30,5 +30,13 @@ class OperationalReadingBase(BaseModel):
 
 class OperationalReadingResponse(OperationalReadingBase):
     id: int
+    group_code: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReadingPage(BaseModel):
+    items: list[OperationalReadingResponse]
+    total: int
+    limit: int
+    offset: int

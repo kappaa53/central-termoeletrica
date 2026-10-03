@@ -65,7 +65,10 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
 
-  const currentPage = pageInfo[pathname] ?? {
+  // Secção atual: "/groups/GG1/readings" -> "/groups"
+  const section = pathname === "/" ? "/" : `/${pathname.split("/")[1]}`;
+
+  const currentPage = pageInfo[pathname] ?? pageInfo[section] ?? {
     title: "Central Termoelétrica",
     description: "Sistema de Apoio à Decisão",
   };
@@ -88,7 +91,7 @@ export default function AppShell({
                   key={item.href}
                   label={item.label}
                   href={item.href}
-                  active={pathname === item.href}
+                  active={section === item.href}
                 />
               ))}
             </NavSection>
@@ -99,7 +102,7 @@ export default function AppShell({
                   key={item.href}
                   label={item.label}
                   href={item.href}
-                  active={pathname === item.href}
+                  active={section === item.href}
                 />
               ))}
             </NavSection>
@@ -110,7 +113,7 @@ export default function AppShell({
                   key={item.href}
                   label={item.label}
                   href={item.href}
-                  active={pathname === item.href}
+                  active={section === item.href}
                 />
               ))}
             </NavSection>

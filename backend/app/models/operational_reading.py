@@ -1,7 +1,7 @@
 # backend/app/models/operational_reading.py
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -9,6 +9,10 @@ from app.models.base import Base
 
 class OperationalReading(Base):
     __tablename__ = "operational_readings"
+    __table_args__ = (
+        # Consultas mais comuns: leituras de um grupo ordenadas por data
+        Index("ix_operational_readings_group_timestamp", "group_id", "timestamp"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     group_id: Mapped[int] = mapped_column(Integer, ForeignKey("groups.id"), nullable=False)
@@ -35,3 +39,7 @@ class OperationalReading(Base):
     intake_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     group = relationship("Group", back_populates="readings")
+
+    @property
+    def group_code(self) -> str | None:
+        return self.group.code if self.group else None
