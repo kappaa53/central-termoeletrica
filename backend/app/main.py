@@ -10,9 +10,11 @@ from app.routers import (
     auth,
     dashboard,
     groups,
+    imports,
     incidents,
     maintenance,
     readings,
+    statistics,
     thresholds,
     users,
 )
@@ -38,7 +40,7 @@ app.include_router(users.router)
 
 # Restantes routers: exigem sessão iniciada
 authenticated = [Depends(get_current_user)]
-for module in (groups, readings, dashboard, alerts, thresholds, incidents, maintenance):
+for module in (groups, readings, dashboard, alerts, thresholds, incidents, maintenance, statistics, imports):
     app.include_router(module.router, dependencies=authenticated)
 
 

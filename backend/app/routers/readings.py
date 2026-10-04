@@ -1,5 +1,5 @@
 # backend/app/routers/readings.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -85,6 +85,9 @@ def create_reading(
     group = db.scalars(select(GroupModel).where(GroupModel.code == body.group_code)).first()
     if not group:
         raise HTTPException(status_code=404, detail=f"Grupo {body.group_code} não encontrado")
+
+    if body.timestamp and body.timestamp.replace(tzinfo=None) > now() + timedelta(hours=1):
+        raise HTTPException(status_code=422, detail="A data/hora da leitura está no futuro")
 
     data = body.model_dump(exclude={"group_code", "timestamp", "operator"})
     reading = ReadingModel(

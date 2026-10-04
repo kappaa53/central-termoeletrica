@@ -659,291 +659,130 @@ export async function resetUserPassword(id: number, newPassword: string): Promis
 }
 
 // ============ ESTATÍSTICAS ============
-export interface StatisticsSummary {
-  total_groups: number;
-  active_groups: number;
-  maintenance_groups: number;
-  stopped_groups: number;
-  total_power_mw: number;
-  average_power_mw: number;
-  total_running_hours: number;
-  total_alerts: number;
-  critical_alerts: number;
-  open_incidents: number;
-  total_maintenance_cost: number;
-  pending_maintenance: number;
+// Espelha backend/app/schemas/statistics.py
+export interface StatisticsOverview {
+  days: number;
+  start: string;
+  end: string;
+  energy_mwh: number;
+  avg_power_mw: number;
+  availability_pct: number;
+  utilization_pct: number;
+  load_factor_pct: number;
+  alerts_total: number;
+  alerts_critical: number;
+  incidents_opened: number;
+  incidents_resolved: number;
+  mttr_hours: number | null;
+  maintenance_completed: number;
+  maintenance_cost: number;
 }
 
-export interface GroupStatus {
-  group_code: string;
-  status: string;
-  power_mw: number;
-  temperature_c: number;
-  running_hours: number;
+export interface DailyEnergy {
+  day: string; // YYYY-MM-DD
+  energy_mwh: number;
 }
 
-export interface AlertStatistics {
-  type: string;
+export interface GroupStatistics {
+  code: string;
+  manufacturer: string;
+  nominal_power_mw: number;
+  energy_mwh: number;
+  availability_pct: number;
+  utilization_pct: number;
+  load_factor_pct: number | null;
+  operating_hours: number;
+  alerts: number;
+  incidents: number;
+  maintenance_cost: number;
+}
+
+export interface CountByKey {
+  key: string;
+  label: string;
   count: number;
 }
 
-export interface IncidentStatistics {
-  group_code: string;
-  total: number;
-  open: number;
-  resolved: number;
+export interface StatisticsReport {
+  overview: StatisticsOverview;
+  daily_energy: DailyEnergy[];
+  groups: GroupStatistics[];
+  alerts_by_parameter: CountByKey[];
+  incidents_by_type: CountByKey[];
 }
 
-export interface MaintenanceStatistics {
-  group_code: string;
-  preventive: number;
-  corrective: number;
-  cost: number;
+export function getStatistics(days: number): Promise<StatisticsReport> {
+  return request(`/statistics/?days=${days}`, undefined, 'Erro ao carregar estatísticas');
 }
-
-// Funções API (MOCK por enquanto)
-const MOCK_STATISTICS: StatisticsSummary = {
-  total_groups: 9,
-  active_groups: 6,
-  maintenance_groups: 2,
-  stopped_groups: 1,
-  total_power_mw: 8.24,
-  average_power_mw: 0.92,
-  total_running_hours: 87500,
-  total_alerts: 12,
-  critical_alerts: 3,
-  open_incidents: 4,
-  total_maintenance_cost: 15600,
-  pending_maintenance: 3,
-};
-
-const MOCK_GROUP_STATUS: GroupStatus[] = [
-  { group_code: 'GG1', status: 'Operando', power_mw: 0.81, temperature_c: 84.2, running_hours: 12543 },
-  { group_code: 'GG2', status: 'Operando', power_mw: 0.76, temperature_c: 83.5, running_hours: 11876 },
-  { group_code: 'GG3', status: 'Parado', power_mw: 0.00, temperature_c: 48.3, running_hours: 9876 },
-  { group_code: 'GG4', status: 'Operando', power_mw: 0.83, temperature_c: 85.1, running_hours: 10987 },
-  { group_code: 'GG5', status: 'Operando', power_mw: 0.79, temperature_c: 84.7, running_hours: 8765 },
-  { group_code: 'GG6', status: 'Manutenção', power_mw: 0.00, temperature_c: 35.6, running_hours: 7654 },
-  { group_code: 'GG7', status: 'Operando', power_mw: 0.80, temperature_c: 84.0, running_hours: 6543 },
-  { group_code: 'GG8', status: 'Operando', power_mw: 2.11, temperature_c: 86.3, running_hours: 5432 },
-  { group_code: 'GG9', status: 'Manutenção', power_mw: 0.00, temperature_c: 39.2, running_hours: 4321 },
-];
-
-const MOCK_ALERT_STATISTICS: AlertStatistics[] = [
-  { type: 'CRITICAL', count: 3 },
-  { type: 'WARNING', count: 5 },
-  { type: 'INFO', count: 4 },
-];
-
-const MOCK_INCIDENT_STATISTICS: IncidentStatistics[] = [
-  { group_code: 'GG1', total: 3, open: 1, resolved: 2 },
-  { group_code: 'GG2', total: 2, open: 1, resolved: 1 },
-  { group_code: 'GG3', total: 1, open: 1, resolved: 0 },
-  { group_code: 'GG4', total: 2, open: 0, resolved: 2 },
-  { group_code: 'GG8', total: 2, open: 1, resolved: 1 },
-];
-
-const MOCK_MAINTENANCE_STATISTICS: MaintenanceStatistics[] = [
-  { group_code: 'GG1', preventive: 3, corrective: 1, cost: 4300 },
-  { group_code: 'GG2', preventive: 2, corrective: 2, cost: 3800 },
-  { group_code: 'GG4', preventive: 1, corrective: 0, cost: 1200 },
-  { group_code: 'GG8', preventive: 2, corrective: 1, cost: 6300 },
-];
-
-export async function getStatisticsSummary(): Promise<StatisticsSummary> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return MOCK_STATISTICS;
-}
-
-export async function getGroupStatus(): Promise<GroupStatus[]> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return MOCK_GROUP_STATUS;
-}
-
-export async function getAlertStatistics(): Promise<AlertStatistics[]> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return MOCK_ALERT_STATISTICS;
-}
-
-export async function getIncidentStatistics(): Promise<IncidentStatistics[]> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return MOCK_INCIDENT_STATISTICS;
-}
-
-export async function getMaintenanceStatistics(): Promise<MaintenanceStatistics[]> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return MOCK_MAINTENANCE_STATISTICS;
-}
-
-
-
 
 // ============ IMPORTAÇÃO ============
+// Espelha backend/app/schemas/imports.py
 export interface ImportBatch {
   id: number;
   filename: string;
   file_type: 'EXCEL' | 'CSV';
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  status: 'COMPLETED' | 'PARTIAL' | 'FAILED';
   total_rows: number;
   successful_rows: number;
   error_rows: number;
-  started_at: string;
-  completed_at: string | null;
+  alerts_created: number;
   created_by: string;
   created_at: string;
+  completed_at: string | null;
 }
 
-export interface ImportError {
+export interface ImportRowError {
   id: number;
-  batch_id: number;
   row_number: number;
   column: string | null;
   error_message: string;
   raw_data: string | null;
-  created_at: string;
 }
 
 export interface ImportPreview {
-  headers: string[];
-  rows: unknown[][];
+  filename: string;
+  file_type: 'EXCEL' | 'CSV';
+  columns: { header: string; field: string | null; label: string | null }[];
+  missing_required: string[];
   total_rows: number;
-  has_errors: boolean;
+  valid_rows: number;
+  error_rows: number;
+  errors: { row_number: number; column: string | null; message: string }[];
+  sample: Record<string, string | number>[];
 }
 
-// Funções API (MOCK por enquanto)
-const MOCK_IMPORT_BATCHES: ImportBatch[] = [
-  {
-    id: 1,
-    filename: 'leituras_setembro_2026.xlsx',
-    file_type: 'EXCEL',
-    status: 'COMPLETED',
-    total_rows: 150,
-    successful_rows: 148,
-    error_rows: 2,
-    started_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    completed_at: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
-    created_by: 'Carlos Manuel',
-    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 2,
-    filename: 'dados_operacionais_agosto.csv',
-    file_type: 'CSV',
-    status: 'COMPLETED',
-    total_rows: 89,
-    successful_rows: 87,
-    error_rows: 2,
-    started_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    completed_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
-    created_by: 'Ana Júlia',
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 3,
-    filename: 'manutencao_julho.xlsx',
-    file_type: 'EXCEL',
-    status: 'FAILED',
-    total_rows: 45,
-    successful_rows: 0,
-    error_rows: 45,
-    started_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    completed_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000 + 1 * 60 * 60 * 1000).toISOString(),
-    created_by: 'Nelson Cadete',
-    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 4,
-    filename: 'leituras_junho_2026.xlsx',
-    file_type: 'EXCEL',
-    status: 'PROCESSING',
-    total_rows: 200,
-    successful_rows: 0,
-    error_rows: 0,
-    started_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    completed_at: null,
-    created_by: 'Carlos Manuel',
-    created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-  },
-];
-
-const MOCK_IMPORT_ERRORS: ImportError[] = [
-  {
-    id: 1,
-    batch_id: 1,
-    row_number: 23,
-    column: 'oil_temperature',
-    error_message: 'Valor de temperatura fora do limite permitido (95°C)',
-    raw_data: '{"oil_temperature": 102.5}',
-    created_at: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 2,
-    batch_id: 1,
-    row_number: 67,
-    column: 'group_code',
-    error_message: 'Código do grupo não encontrado: GG10',
-    raw_data: '{"group_code": "GG10"}',
-    created_at: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 3,
-    batch_id: 2,
-    row_number: 34,
-    column: 'timestamp',
-    error_message: 'Formato de data inválido',
-    raw_data: '{"timestamp": "2026-08-15 14:30"}',
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 4,
-    batch_id: 2,
-    row_number: 56,
-    column: 'active_power',
-    error_message: 'Valor de potência negativo',
-    raw_data: '{"active_power": -0.5}',
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
-  },
-];
-
-export async function getImportBatches(): Promise<ImportBatch[]> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return MOCK_IMPORT_BATCHES;
+async function uploadTo<T>(path: string, file: File, fallback: string): Promise<T> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await authFetch(`${API_BASE}${path}`, { method: 'POST', body: form });
+  if (!response.ok) throw await apiError(response, fallback);
+  return response.json();
 }
 
-export async function getImportErrors(batchId: number): Promise<ImportError[]> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return MOCK_IMPORT_ERRORS.filter(e => e.batch_id === batchId);
+export function previewImport(file: File): Promise<ImportPreview> {
+  return uploadTo('/imports/preview', file, 'Erro ao analisar o ficheiro');
 }
 
-export async function uploadFile(file: File): Promise<ImportBatch> {
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  const newBatch: ImportBatch = {
-    id: MOCK_IMPORT_BATCHES.length + 1,
-    filename: file.name,
-    file_type: file.name.endsWith('.csv') ? 'CSV' : 'EXCEL',
-    status: 'PROCESSING',
-    total_rows: Math.floor(Math.random() * 200) + 50,
-    successful_rows: 0,
-    error_rows: 0,
-    started_at: new Date().toISOString(),
-    completed_at: null,
-    created_by: 'Usuário Atual',
-    created_at: new Date().toISOString(),
-  };
-  
-  MOCK_IMPORT_BATCHES.unshift(newBatch);
-  
-  // Simular processamento
-  setTimeout(() => {
-    const batch = MOCK_IMPORT_BATCHES.find(b => b.id === newBatch.id);
-    if (batch) {
-      batch.status = 'COMPLETED';
-      batch.successful_rows = batch.total_rows - 3;
-      batch.error_rows = 3;
-      batch.completed_at = new Date().toISOString();
-    }
-  }, 2000);
-  
-  return newBatch;
+export function runImport(file: File): Promise<ImportBatch> {
+  return uploadTo('/imports/', file, 'Erro ao importar o ficheiro');
+}
+
+export function getImportBatches(): Promise<ImportBatch[]> {
+  return request('/imports/', undefined, 'Erro ao carregar o histórico');
+}
+
+export function getImportErrors(batchId: number): Promise<ImportRowError[]> {
+  return request(`/imports/${batchId}/errors`, undefined, 'Erro ao carregar os erros');
+}
+
+// Descarrega o modelo Excel (precisa do token, por isso não é um simples link)
+export async function downloadImportTemplate(): Promise<void> {
+  const response = await authFetch(`${API_BASE}/imports/template`);
+  if (!response.ok) throw await apiError(response, 'Erro ao descarregar o modelo');
+  const url = URL.createObjectURL(await response.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'modelo_leituras.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
 }

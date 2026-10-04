@@ -1,346 +1,426 @@
-
+// frontend/app/imports/page.tsx
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { 
-  ImportBatch, 
-  ImportError,
-  getImportBatches, 
-  getImportErrors,
-  uploadFile 
-} from '@/app/services/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import Modal from '@/app/components/ui/Modal';
+import { MANAGEMENT_ROLES, useAuth } from '@/app/lib/auth';
+import { formatDateTime } from '@/app/lib/format';
 import {
-  DocumentArrowUpIcon,
-  DocumentIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
-  EyeIcon,
-  XMarkIcon,
-  ArrowPathIcon
-} from '@heroicons/react/24/outline';
+  downloadImportTemplate,
+  getImportBatches,
+  getImportErrors,
+  previewImport,
+  runImport,
+  type ImportBatch,
+  type ImportPreview,
+  type ImportRowError,
+} from '@/app/services/api';
 
-const getStatusColor = (status: ImportBatch['status']) => {
-  switch (status) {
-    case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-    case 'PROCESSING': return 'bg-blue-100 text-blue-800';
-    case 'COMPLETED': return 'bg-green-100 text-green-800';
-    case 'FAILED': return 'bg-red-100 text-red-800';
-  }
+const statusStyles: Record<ImportBatch['status'], { label: string; className: string }> = {
+  COMPLETED: { label: 'Concluída', className: 'bg-emerald-50 text-emerald-700' },
+  PARTIAL: { label: 'Parcial', className: 'bg-amber-50 text-amber-800' },
+  FAILED: { label: 'Falhou', className: 'bg-red-50 text-red-700' },
 };
 
-const getStatusIcon = (status: ImportBatch['status']) => {
-  switch (status) {
-    case 'PENDING': return <ClockIcon className="h-5 w-5 text-yellow-500" />;
-    case 'PROCESSING': return <ArrowPathIcon className="h-5 w-5 text-blue-500 animate-spin" />;
-    case 'COMPLETED': return <CheckCircleIcon className="h-5 w-5 text-green-500" />;
-    case 'FAILED': return <XCircleIcon className="h-5 w-5 text-red-500" />;
-  }
-};
-
-const getStatusText = (status: ImportBatch['status']) => {
-  switch (status) {
-    case 'PENDING': return 'Pendente';
-    case 'PROCESSING': return 'Processando';
-    case 'COMPLETED': return 'Concluído';
-    case 'FAILED': return 'Falhou';
-  }
-};
-
-const getFileTypeIcon = () => {
-  return <DocumentIcon className="h-5 w-5 text-gray-400" />;
-};
+// Colunas mostradas na amostra
+const SAMPLE_COLUMNS: [string, string][] = [
+  ['group_code', 'Grupo'],
+  ['timestamp', 'Data e hora'],
+  ['status', 'Estado'],
+  ['operator', 'Operador'],
+  ['power', 'Potência (MW)'],
+  ['oil_temperature', 'Temp. óleo'],
+  ['oil_pressure', 'Pressão óleo'],
+  ['water_temperature', 'Temp. água'],
+];
 
 export default function ImportsPage() {
+  const { hasRole } = useAuth();
+  const canImport = hasRole(...MANAGEMENT_ROLES);
+
   const [batches, setBatches] = useState<ImportBatch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [selectedBatch, setSelectedBatch] = useState<ImportBatch | null>(null);
-  const [errors, setErrors] = useState<ImportError[]>([]);
-  const [showErrors, setShowErrors] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [busy, setBusy] = useState<'preview' | 'import' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ImportBatch | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showErrorsOf, setShowErrorsOf] = useState<ImportBatch | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const loadBatches = async () => {
-    try {
-      const data = await getImportBatches();
-      setBatches(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    getImportBatches()
-      .then(setBatches)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+  const loadBatches = useCallback(() => {
+    getImportBatches().then(setBatches).catch(console.error);
   }, []);
 
-  const handleFileUpload = async (file: File) => {
-    try {
-      setUploading(true);
-      await uploadFile(file);
-      await loadBatches();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setUploading(false);
-    }
-  };
+  useEffect(() => {
+    if (canImport) loadBatches();
+  }, [canImport, loadBatches]);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragActive(false);
-    const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv'))) {
-      handleFileUpload(file);
-    } else {
-      alert('Por favor, envie apenas arquivos Excel (.xlsx, .xls) ou CSV.');
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragActive(false);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleFileUpload(file);
-    }
-  };
-
-  const viewErrors = async (batch: ImportBatch) => {
-    setSelectedBatch(batch);
-    try {
-      const errorData = await getImportErrors(batch.id);
-      setErrors(errorData);
-      setShowErrors(true);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Carregando importações...</div>
-      </div>
-    );
+  if (!canImport) {
+    return <p className="p-6 text-slate-600">A importação de dados está reservada a gestores e administradores.</p>;
   }
 
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Importação de Dados</h1>
+  const reset = () => {
+    setFile(null);
+    setPreview(null);
+    setError(null);
+    if (inputRef.current) inputRef.current.value = '';
+  };
 
-      {/* Área de Upload */}
-      <div className="mb-6">
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            dragActive 
-              ? 'border-blue-500 bg-blue-50' 
-              : 'border-gray-300 bg-white hover:border-blue-400'
-          }`}
-        >
-          <DocumentArrowUpIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600">
-            Arraste e solte seu arquivo aqui ou 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-blue-600 hover:text-blue-800 font-medium ml-1"
-            >
-              clique para selecionar
-            </button>
-          </p>
-          <p className="text-sm text-gray-400 mt-2">
-            Formatos suportados: .xlsx, .xls, .csv
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
+  const selectFile = async (f: File | undefined) => {
+    if (!f) return;
+    const name = f.name.toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.csv')) {
+      setError('Formato não suportado. Use um ficheiro Excel (.xlsx) ou CSV.');
+      return;
+    }
+    setFile(f);
+    setPreview(null);
+    setResult(null);
+    setError(null);
+    try {
+      setBusy('preview');
+      setPreview(await previewImport(f));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao analisar o ficheiro');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const doImport = async () => {
+    if (!file) return;
+    try {
+      setBusy('import');
+      setError(null);
+      const batch = await runImport(file);
+      setResult(batch);
+      reset();
+      loadBatches();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao importar');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const blocked = Boolean(preview && (preview.missing_required.length > 0 || preview.valid_rows === 0));
+
+  return (
+    <div className="space-y-6 p-6">
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900">Importar leituras operacionais</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Excel (.xlsx) ou CSV, até 5 MB. Colunas obrigatórias: Grupo, Data e hora e Estado.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => downloadImportTemplate().catch((e) => setError(e.message))}
+            className="flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            Descarregar modelo
+          </button>
         </div>
-        {uploading && (
-          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center space-x-3">
-              <ArrowPathIcon className="h-5 w-5 text-blue-500 animate-spin" />
-              <span className="text-blue-700">Enviando arquivo...</span>
+
+        {result && (
+          <div
+            className={`mt-4 rounded-lg px-4 py-3 text-sm ${
+              result.status === 'FAILED' ? 'bg-red-50 text-red-800' : 'bg-emerald-50 text-emerald-800'
+            }`}
+            role="status"
+          >
+            <strong>{result.filename}:</strong> {result.successful_rows} de {result.total_rows} linhas importadas
+            {result.error_rows > 0 && `, ${result.error_rows} com erro`}
+            {result.alerts_created > 0 && ` · ${result.alerts_created} alerta(s) gerado(s)`}.
+          </div>
+        )}
+
+        {!preview && (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+              selectFile(e.dataTransfer.files[0]);
+            }}
+            className={`mt-5 flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 text-center transition ${
+              dragActive ? 'border-slate-500 bg-slate-50' : 'border-slate-300'
+            }`}
+          >
+            <ArrowUpTrayIcon className="h-10 w-10 text-slate-400" />
+            <p className="mt-3 text-sm text-slate-600">
+              {busy === 'preview' ? `A analisar ${file?.name}...` : 'Arraste o ficheiro para aqui ou'}
+            </p>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              disabled={busy !== null}
+              className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+            >
+              Escolher ficheiro
+            </button>
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".xlsx,.csv"
+              className="hidden"
+              onChange={(e) => selectFile(e.target.files?.[0])}
+            />
+          </div>
+        )}
+
+        {error && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+        {preview && (
+          <div className="mt-5 space-y-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <DocumentTextIcon className="h-5 w-5 text-slate-400" />
+              <span className="font-medium text-slate-900">{preview.filename}</span>
+              <Stat label="linhas" value={preview.total_rows} />
+              <Stat label="válidas" value={preview.valid_rows} tone="ok" />
+              <Stat label="com erro" value={preview.error_rows} tone={preview.error_rows ? 'bad' : undefined} />
+            </div>
+
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Colunas</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {preview.columns.map((c) => (
+                  <span
+                    key={c.header}
+                    className={`rounded-full px-2.5 py-1 text-xs ${
+                      c.field ? 'bg-sky-50 text-sky-800' : 'bg-slate-100 text-slate-400 line-through'
+                    }`}
+                    title={c.field ? `Reconhecida como: ${c.label}` : 'Coluna não reconhecida (ignorada)'}
+                  >
+                    {c.header}
+                  </span>
+                ))}
+              </div>
+              {preview.missing_required.length > 0 && (
+                <p className="mt-2 text-sm text-red-700">
+                  Colunas obrigatórias em falta: <strong>{preview.missing_required.join(', ')}</strong>
+                </p>
+              )}
+            </div>
+
+            {preview.errors.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Linhas com erro {preview.errors.length >= 100 && '(primeiras 100)'}
+                </h3>
+                <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold">Linha</th>
+                        <th className="px-3 py-2 font-semibold">Coluna</th>
+                        <th className="px-3 py-2 font-semibold">Erro</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {preview.errors.map((e, i) => (
+                        <tr key={i}>
+                          <td className="px-3 py-1.5 tabular-nums text-slate-500">{e.row_number}</td>
+                          <td className="px-3 py-1.5 text-slate-700">{e.column ?? '—'}</td>
+                          <td className="px-3 py-1.5 text-red-700">{e.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {preview.sample.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Amostra das linhas válidas
+                </h3>
+                <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="bg-slate-50 text-xs text-slate-500">
+                      <tr>
+                        {SAMPLE_COLUMNS.map(([, label]) => (
+                          <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">
+                            {label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {preview.sample.map((row, i) => (
+                        <tr key={i}>
+                          {SAMPLE_COLUMNS.map(([key]) => (
+                            <td key={key} className="whitespace-nowrap px-3 py-1.5 tabular-nums text-slate-700">
+                              {key === 'timestamp' && row[key]
+                                ? formatDateTime(String(row[key]))
+                                : typeof row[key] === 'number'
+                                  ? row[key].toLocaleString('pt-PT')
+                                  : (row[key] ?? '—')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-end">
+              {preview.error_rows > 0 && !blocked && (
+                <p className="text-sm text-slate-500 sm:mr-auto">
+                  As linhas com erro não serão importadas e ficam registadas no histórico.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={reset}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={doImport}
+                disabled={blocked || busy !== null}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+              >
+                {busy === 'import'
+                  ? 'A importar...'
+                  : `Importar ${preview.valid_rows} linha${preview.valid_rows === 1 ? '' : 's'} válida${preview.valid_rows === 1 ? '' : 's'}`}
+              </button>
             </div>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Lista de Importações */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Histórico de Importações</h2>
-          <span className="text-sm text-gray-500">{batches.length} importações</span>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="font-semibold text-slate-900">Histórico de importações</h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Arquivo
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Linhas
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Sucesso
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Erros
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Data
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {batches.length === 0 ? (
+        {batches.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-slate-400">Ainda não foram feitas importações.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                    Nenhuma importação realizada ainda
-                  </td>
+                  <th className="px-5 py-3 font-semibold">Data</th>
+                  <th className="px-5 py-3 font-semibold">Ficheiro</th>
+                  <th className="px-5 py-3 font-semibold">Por</th>
+                  <th className="px-5 py-3 font-semibold">Estado</th>
+                  <th className="px-5 py-3 text-right font-semibold">Importadas</th>
+                  <th className="px-5 py-3 text-right font-semibold">Com erro</th>
+                  <th className="px-5 py-3 text-right font-semibold">Alertas</th>
+                  <th className="px-5 py-3" />
                 </tr>
-              ) : (
-                batches.map((batch) => (
-                  <tr key={batch.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2">
-                        {getFileTypeIcon()}
-                        <span className="text-sm font-medium text-gray-900">
-                          {batch.filename}
-                        </span>
-                      </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 tabular-nums">
+                {batches.map((b) => (
+                  <tr key={b.id}>
+                    <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatDateTime(b.created_at)}</td>
+                    <td className="px-5 py-3">
+                      <span className="font-medium text-slate-900">{b.filename}</span>
+                      <span className="ml-2 text-xs text-slate-400">{b.file_type}</span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2">
-                        {getStatusIcon(batch.status)}
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(batch.status)}`}>
-                          {getStatusText(batch.status)}
-                        </span>
-                      </div>
+                    <td className="px-5 py-3 text-slate-600">{b.created_by}</td>
+                    <td className="px-5 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyles[b.status].className}`}>
+                        {statusStyles[b.status].label}
+                      </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {batch.total_rows}
+                    <td className="px-5 py-3 text-right">
+                      {b.successful_rows} / {b.total_rows}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                      {batch.successful_rows}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
-                      {batch.error_rows}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(batch.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {batch.error_rows > 0 && (
+                    <td className="px-5 py-3 text-right">{b.error_rows}</td>
+                    <td className="px-5 py-3 text-right">{b.alerts_created}</td>
+                    <td className="px-5 py-3 text-right">
+                      {b.error_rows > 0 && (
                         <button
-                          onClick={() => viewErrors(batch)}
-                          className="text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                          type="button"
+                          onClick={() => setShowErrorsOf(b)}
+                          className="text-sm text-slate-600 hover:text-slate-900"
                         >
-                          <EyeIcon className="h-4 w-4" />
-                          <span>Ver erros</span>
+                          Ver erros
                         </button>
                       )}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal de Erros */}
-      {showErrors && selectedBatch && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Erros de Importação
-                </h3>
-                <p className="text-sm text-gray-500">
-                  {selectedBatch.filename} • {errors.length} erros encontrados
-                </p>
-              </div>
-              <button
-                onClick={() => setShowErrors(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {errors.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">
-                  Nenhum erro encontrado
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {errors.map((error) => (
-                    <div key={error.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <XCircleIcon className="h-4 w-4 text-red-500" />
-                            <span className="text-sm font-medium text-red-700">
-                              Linha {error.row_number}
-                            </span>
-                            {error.column && (
-                              <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
-                                {error.column}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-red-700">{error.error_message}</p>
-                          {error.raw_data && (
-                            <div className="mt-1 text-xs text-red-600 bg-red-100 p-1 rounded">
-                              Dados: {error.raw_data}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="p-4 border-t bg-gray-50">
-              <button
-                onClick={() => setShowErrors(false)}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Fechar
-              </button>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
+        )}
+      </section>
+
+      {showErrorsOf && <BatchErrorsDialog batch={showErrorsOf} onClose={() => setShowErrorsOf(null)} />}
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ok' | 'bad' }) {
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+        tone === 'ok' ? 'bg-emerald-50 text-emerald-700' : tone === 'bad' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-700'
+      }`}
+    >
+      <strong className="tabular-nums">{value.toLocaleString('pt-PT')}</strong> {label}
+    </span>
+  );
+}
+
+function BatchErrorsDialog({ batch, onClose }: { batch: ImportBatch; onClose: () => void }) {
+  const [errors, setErrors] = useState<ImportRowError[] | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  useEffect(() => {
+    getImportErrors(batch.id)
+      .then(setErrors)
+      .catch((err) => setFailed(err instanceof Error ? err.message : 'Erro'));
+  }, [batch.id]);
+
+  const summarize = (raw: string | null) => {
+    if (!raw) return '';
+    try {
+      return Object.entries(JSON.parse(raw) as Record<string, unknown>)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(' · ');
+    } catch {
+      return raw;
+    }
+  };
+
+  return (
+    <Modal title={`Erros: ${batch.filename}`} onClose={onClose} size="lg">
+      {failed && <p className="text-sm text-red-600">{failed}</p>}
+      {!errors && !failed && <p className="text-sm text-slate-500">A carregar...</p>}
+      {errors && (
+        <div className="max-h-[60vh] overflow-auto">
+          <ul className="divide-y divide-slate-100 text-sm">
+            {errors.map((e) => (
+              <li key={e.id} className="py-2">
+                <div>
+                  <span className="tabular-nums text-slate-500">Linha {e.row_number}</span>
+                  {e.column && <span className="ml-2 text-slate-700">{e.column}</span>}
+                  <span className="ml-2 text-red-700">{e.error_message}</span>
+                </div>
+                {e.raw_data && <p className="mt-0.5 truncate text-xs text-slate-400">{summarize(e.raw_data)}</p>}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-    </div>
+    </Modal>
   );
 }

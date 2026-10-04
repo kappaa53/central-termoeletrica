@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.core.database import SessionLocal
 from app.models.group import Group
 from app.models.alert import ALERT_ACKNOWLEDGED, Alert
+from app.models.import_batch import ImportBatch
 from app.models.operational_reading import OperationalReading
 from app.services.alert_engine import now as engine_now, rebuild_alerts
 
@@ -30,6 +31,20 @@ READING_HOURS = [
 ]
 
 random = Random(42)
+
+# Os grupos parados/em manutenção estiveram em operação até há N dias
+# (coerente com a ocorrência do GG4 e a revisão em curso do GG6)
+STATUS_SINCE_DAYS = {
+    "GG4": 6,
+    "GG6": 2,
+}
+
+
+def status_at(group: Group, timestamp: datetime, now: datetime) -> str:
+    days = STATUS_SINCE_DAYS.get(group.code)
+    if days is not None and timestamp < now - timedelta(days=days):
+        return "Em operação"
+    return group.status
 
 # Anomalias injetadas nas leituras mais recentes para demonstrar os alertas.
 # Chave: código do grupo -> {posição a contar do fim (-1 = última): valores}
@@ -68,6 +83,7 @@ def variation(value: float, percentage: float = 0.05) -> float:
 
 def generate_reading(
     group: Group,
+    status: str,
     timestamp: datetime,
     operating_hours: float,
     energy_produced: float,
@@ -76,7 +92,7 @@ def generate_reading(
     # --------------------------------------------------------
     # GRUPO PARADO
     # --------------------------------------------------------
-    if group.status == "Parado":
+    if status == "Parado":
         return OperationalReading(
             group_id=group.id,
             timestamp=timestamp,
@@ -103,7 +119,7 @@ def generate_reading(
     # --------------------------------------------------------
     # GRUPO EM MANUTENÇÃO
     # --------------------------------------------------------
-    if group.status == "Manutenção":
+    if status == "Manutenção":
         return OperationalReading(
             group_id=group.id,
             timestamp=timestamp,
@@ -231,6 +247,7 @@ def seed_readings(force: bool = False):
                 print("Operação cancelada.")
                 return
 
+            db.query(ImportBatch).delete()
             db.query(Alert).delete()
             db.query(OperationalReading).delete()
             db.commit()
@@ -273,8 +290,10 @@ def seed_readings(force: bool = False):
                     if timestamp > now:
                         continue
 
+                    status = status_at(group, timestamp, now)
                     reading = generate_reading(
                         group=group,
+                        status=status,
                         timestamp=timestamp,
                         operating_hours=operating_hours,
                         energy_produced=energy_produced,
@@ -283,7 +302,7 @@ def seed_readings(force: bool = False):
                     group_readings.append(reading)
 
                     # Atualiza os acumuladores apenas para grupos em operação
-                    if group.status == "Em operação":
+                    if status == "Em operação":
                         operating_hours = (
                             reading.operating_hours
                             or operating_hours
